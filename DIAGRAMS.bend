@@ -4,7 +4,7 @@
 #   bend DIAGRAMS.bend <url>    sends each one that changed (HTTP POST, header Title) to <url>, from a clean commit only
 #
 # Nothing here is typed by hand: each diagram is a flow the code already has (HEAR.flow(), OFFER.flow(),
-# ARCH.flow()), and its top node names the commit it came from.
+# ARCH.flow(), GATE.flow()), and its top node names the commit it came from.
 
 import Base
 import ./FLOW.bend as F
@@ -12,6 +12,7 @@ import ./HEAR.bend as H
 import ./OFFER.bend as O
 import ./ARCH.bend as A
 import ./PERMIT.bend as Pm
+import ./GATE.bend as G
 
 # ---------- Mermaid text ----------
 
@@ -100,7 +101,9 @@ def diagrams(+commit: String) -> List<&1, String & String>:
     ("Flow: the chat offers the mode", mermaid("OFFER.flow at " ++ commit, O.flow())),
     ("Permission: today", mermaid("PERMIT.today at " ++ commit, Pm.today())),
     ("Permission, option A: write the list right", mermaid("PERMIT.list at " ++ commit, Pm.list())),
-    ("Permission, option B: the CLI asks Bend", mermaid("PERMIT.ask_bend at " ++ commit, Pm.ask_bend()))
+    ("Permission, option B: the CLI asks Bend", mermaid("PERMIT.ask_bend at " ++ commit, Pm.ask_bend())),
+    ("Permission: the gate decides", mermaid("GATE.flow at " ++ commit, G.flow())),
+    ("Permission: the gate, tried", mermaid("GATE.tried at " ++ commit, G.tried()))
   ]
 
 # ---------- Files ----------
