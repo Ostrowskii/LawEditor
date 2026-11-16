@@ -4,6 +4,7 @@
 #   Person: you act (talk, answer a question).
 #   Skill:  a model acts, from a prompt. It can get it wrong.
 #   System: Bend acts. Laws prove what it does.
+#   Cli:    another program acts (Claude's or Codex's CLI). It follows its own rules, not our laws.
 
 import Base
 
@@ -11,6 +12,7 @@ type Who is Data:
   Person{}
   Skill{}
   System{}
+  Cli{}
 
 # What each kind of actor is. The diagrams' legend is drawn from this.
 def who_means(w: Who) -> String:
@@ -21,6 +23,8 @@ def who_means(w: Who) -> String:
       "Skill: a model acts, from a prompt. It proposes and can be wrong"
     case System{}:
       "System: Bend acts. It decides, and laws prove what it does"
+    case Cli{}:
+      "CLI: another program acts, Claude's or Codex's. It follows its own rules, not our laws"
 
 # An arrow to another step (by its place in the flow), with what makes it go there.
 type Go is Data:
@@ -59,6 +63,8 @@ def is_person(w: Who) -> Bool:
       False{}
     case System{}:
       False{}
+    case Cli{}:
+      False{}
 
 def is_skill(w: Who) -> Bool:
   match w:
@@ -67,6 +73,8 @@ def is_skill(w: Who) -> Bool:
     case Skill{}:
       True{}
     case System{}:
+      False{}
+    case Cli{}:
       False{}
 
 def is_system(w: Who) -> Bool:
@@ -77,6 +85,8 @@ def is_system(w: Who) -> Bool:
       False{}
     case System{}:
       True{}
+    case Cli{}:
+      False{}
 
 def name_of(s: Step) -> String:
   match s:

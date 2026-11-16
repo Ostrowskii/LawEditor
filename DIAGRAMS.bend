@@ -11,6 +11,7 @@ import ./FLOW.bend as F
 import ./HEAR.bend as H
 import ./OFFER.bend as O
 import ./ARCH.bend as A
+import ./PERMIT.bend as Pm
 
 # ---------- Mermaid text ----------
 
@@ -29,6 +30,8 @@ def color(w: F.Who) -> String:
       "yellow"
     case F.System{}:
       "green"
+    case F.Cli{}:
+      "gray"
 
 def writes_mark(x: Bool) -> String:
   match x:
@@ -84,6 +87,7 @@ def legend(source: String) -> String:
   ++ "  L --> P[" ++ esc(F.who_means(F.Person{})) ++ "]:::" ++ color(F.Person{}) ++ "\n"
   ++ "  L --> K[" ++ esc(F.who_means(F.Skill{})) ++ "]:::" ++ color(F.Skill{}) ++ "\n"
   ++ "  L --> Y[" ++ esc(F.who_means(F.System{})) ++ "]:::" ++ color(F.System{}) ++ "\n"
+  ++ "  L --> C[" ++ esc(F.who_means(F.Cli{})) ++ "]:::" ++ color(F.Cli{}) ++ "\n"
   ++ "  L --> W[" ++ esc("Any step" ++ writes_mark(True{})) ++ "]\n"
 
 # ---------- The diagrams: (title, text) ----------
@@ -93,7 +97,10 @@ def diagrams(+commit: String) -> List<&1, String & String>:
     ("Harness: legend", legend("FLOW.bend at " ++ commit)),
     ("Harness: today", mermaid("ARCH.flow at " ++ commit, A.flow())),
     ("Flow: the chat hears rules", mermaid("HEAR.flow at " ++ commit, H.flow())),
-    ("Flow: the chat offers the mode", mermaid("OFFER.flow at " ++ commit, O.flow()))
+    ("Flow: the chat offers the mode", mermaid("OFFER.flow at " ++ commit, O.flow())),
+    ("Permission: today", mermaid("PERMIT.today at " ++ commit, Pm.today())),
+    ("Permission, option A: write the list right", mermaid("PERMIT.list at " ++ commit, Pm.list())),
+    ("Permission, option B: the CLI asks Bend", mermaid("PERMIT.ask_bend at " ++ commit, Pm.ask_bend()))
   ]
 
 # ---------- Files ----------

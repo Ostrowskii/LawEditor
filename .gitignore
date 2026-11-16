@@ -5,3 +5,4 @@ project/
 .DS_Store
 bun.lock
 .borzoi/
+.claude/

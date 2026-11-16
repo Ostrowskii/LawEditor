@@ -9,6 +9,7 @@ import Base
 import ./MODELS.bend as Models
 import ./POLICY.bend as Policy
 import ./ASK.bend as Ask
+import ./GATE.bend as Gate
 
 # ---------- Text ----------
 
@@ -348,6 +349,48 @@ def allow(+target: String, +body: String) -> IO(String):
     agent : U32 & String <- run_to(Ask.turn_file(nth(String.split(target, '/'), 1n)), "claude", ask_args(nth(String.split(target, '/'), 0n), nth(String.split(body, '\n'), 2n), nth(String.split(body, '\n'), 0n), Ask.told(String.eq(nth(String.split(body, '\n'), 1n), "yes"), nth(String.split(body, '\n'), 2n))), 600000)
     return ask_reply(agent)
 
+# ---------- The interphone (GATE.bend; NEXT.md, 0.1.8) ----------
+# Claude asks POST /mcp/<turn> before an action that isn't on its list, and waits. The question goes to
+# a file the page reads; the server waits for the answer file, with no time limit, as Claude does.
+
+def json(body: String) -> String:
+  http("200 OK", "application/json", body)
+
+# Read the answer file every 300 ms until it says something (said: the last read, trimmed).
+def wait(fuel: Nat, +path: String, said: String) -> IO(String):
+  match fuel said:
+    case 0n _:
+      IO.pure(String, "")
+    case _ SCon{h, t}:
+      IO.pure(String, SCon{h, t})
+    case 1n+f SNil{}:
+      do IO<String>:
+        IO.sleep(300)
+        got : String <- read_file(path)
+        wait(f, path, String.trim(got))
+
+def mcp.call(+turn: String, +msg: String) -> IO(String):
+  do IO<String>:
+    write_file(Gate.answer_file(turn), "")
+    write_file(Gate.question_file(turn), Gate.question(msg))
+    said : String <- wait(4294967295n, Gate.answer_file(turn), "")
+    write_file(Gate.question_file(turn), "")
+    write_file(Gate.answer_file(turn), "")
+    return json(Gate.answer(msg, said))
+
+def mcp.at(notice: Bool, call: Bool, +turn: String, +msg: String) -> IO(String):
+  match notice call:
+    case True{} _:
+      IO.pure(String, http("202 Accepted", "text/plain; charset=utf-8", ""))
+    case False{} True{}:
+      mcp.call(turn, msg)
+    case False{} False{}:
+      IO.pure(String, json(Gate.reply(msg)))
+
+# POST /mcp/<turn>: one MCP message.
+def mcp(+turn: String, +msg: String) -> IO(String):
+  mcp.at(Gate.is_notice(msg), Gate.is_call(msg), turn, msg)
+
 # The models an AI offers, asked to its own CLI (MODELS.bend reads the answer). Only claude and codex.
 def is_ai(+ai: String) -> Bool:
   (String.eq(ai, "claude") || String.eq(ai, "codex"))
@@ -491,8 +534,16 @@ def route_get.debug(is_check: Bool, +path: String, dist: String, +agent_md: Stri
     case False{}:
       route_get.debug_laws(String.eq(path, "/api/debug/LAWS.bend"), path, dist, agent_md)
 
+# GET /mcp/<turn>: the interphone sends nothing on its own (no event stream).
+def route_get.mcp(is_mcp: Bool, +path: String, dist: String, +agent_md: String) -> IO(String):
+  match is_mcp:
+    case True{}:
+      IO.pure(String, http("405 Method Not Allowed", "text/plain; charset=utf-8", ""))
+    case False{}:
+      route_get.debug(String.eq(path, "/api/debug/check"), path, dist, agent_md)
+
 def route_get(+path: String, dist: String, +agent_md: String) -> IO(String):
-  route_get.debug(String.eq(path, "/api/debug/check"), path, dist, agent_md)
+  route_get.mcp(String.starts_with(path, "/mcp/"), path, dist, agent_md)
 
 # POST: /api/generate/<ai> (body: the sentence), /api/chat/<ai>/<model> (body: the conversation),
 # /api/file/<name> (body: the file).
@@ -543,8 +594,15 @@ def route_post.ask(is_ask: Bool, +path: String, body: String, agent_md: String) 
     case False{}:
       route_post.allow(String.starts_with(path, "/api/allow/"), path, body, agent_md)
 
+def route_post.mcp(is_mcp: Bool, +path: String, +body: String, agent_md: String) -> IO(String):
+  match is_mcp:
+    case True{}:
+      mcp(after(path, "/mcp/"), body)
+    case False{}:
+      route_post.ask(String.starts_with(path, "/api/ask/"), path, body, agent_md)
+
 def route_post(+path: String, body: String, agent_md: String) -> IO(String):
-  route_post.ask(String.starts_with(path, "/api/ask/"), path, body, agent_md)
+  route_post.mcp(String.starts_with(path, "/mcp/"), path, body, agent_md)
 
 def route.at(is_post: Bool, +req: String, dist: String, agent_md: String) -> IO(String):
   match is_post:
