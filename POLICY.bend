@@ -115,6 +115,12 @@ def mode_section(m: Mode) -> String:
 # hooks, memory) reaches the chat, and it starts in about half the time. It is told only what this app tells it.
 def claude_isolation() -> String: "--safe-mode"
 
+# The chat that asks can't run in --safe-mode: it turns off MCP servers, the interphone included
+# (tested with Claude Code 2.1.325). So it is isolated piece by piece: no settings file of the person's
+# (their permission rules, hooks and plugins), no MCP server but LawEditor's, no skills or commands.
+def claude_isolation_asking() -> List<&2, String>:
+  ["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]
+
 # What the chat may never do, in any mode: change the project's laws (Claude's --disallowedTools; a deny wins).
 def never() -> List<&2, String>:
   ["Edit(LAWS.bend)", "Write(LAWS.bend)"]

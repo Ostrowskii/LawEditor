@@ -1,6 +1,6 @@
 # Next: the chat asks Bend before it acts (0.1.8)
 
-Decided on 2026-11-12 with the repo owner. Not built yet. The flows are in `PERMIT.bend`; `bend DIAGRAMS.bend` draws them.
+Decided on 2026-11-12 with the repo owner. Built in 0.1.8 (2026-11-16); the laws below are still to add. The flows are in `PERMIT.bend`; `bend DIAGRAMS.bend` draws them.
 
 ## The bug (0.1.7)
 
@@ -52,6 +52,9 @@ All three stop the agent, hand the whole action to the harness, and wait for all
 ## Built so far
 
 - **Piece 1, the interphone** (`GATE.bend`, `server.bend`: `POST /mcp/<turn>`), tested alone on 2026-11-12: Claude 2.1.322 connected to the compiled server, asked with the whole command, waited for the answer file; allow ran it once, deny didn't, no retry. While a call waits, the server still answers the page. Nothing calls it from the app yet.
+- **Piece 2, the gate decides** (`GATE.rules()`, `decide()`, `flow()`, `tried()`), 2026-11-16.
+- **Piece 3, the card during the turn** (`GET /api/question/<turn>`, `POST /api/answer/<turn>`, the session file per conversation), 2026-11-16.
+- **Piece 4, Claude asks the gate** (`--permission-prompts host`, `--permission-prompt-tool mcp__laweditor__approve`, `--mcp-config`), 2026-11-16. Tested in the app. `--safe-mode` turns off MCP, so the chat that asks is isolated by `Policy.claude_isolation_asking()`.
 - **Found while building**: `run_to` stops Claude after 600 s (10 min), so "no time limit" needs that raised for the chat (piece 4). One question at a time per turn: two calls at once would overwrite each other's file.
 
 # Next: the game follows the laws (0.2.0)

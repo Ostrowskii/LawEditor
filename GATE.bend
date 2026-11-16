@@ -1,6 +1,6 @@
 # LawEditor: the interphone. Before an action that isn't on its list, Claude asks LawEditor and waits
 # (--permission-prompt-tool, over MCP). Pure: this reads what Claude sends and writes what goes back;
-# server.bend answers POST /mcp/<turn> with it. NEXT.md (0.1.8) and PERMIT.ask_bend() say why.
+# server.bend answers POST /mcp/<conversation>/<turn> with it. NEXT.md (0.1.8) and PERMIT.ask_bend() say why.
 #
 # MCP over HTTP: each POST holds one JSON-RPC message, {"method":"…","params":{…},"jsonrpc":"2.0","id":…}.
 # A message with no id is a notice and gets no answer. The tool's answer is one text block holding
@@ -101,12 +101,13 @@ def hello(+msg: String) -> String:
 def tools() -> String:
   "{\"tools\":[{\"name\":\"approve\",\"description\":\"LawEditor decides whether the chat may take this action.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"tool_name\":{\"type\":\"string\"},\"input\":{\"type\":\"object\"},\"tool_use_id\":{\"type\":\"string\"}},\"required\":[\"tool_name\",\"input\"]}}]}"
 
-def decided(allowed: Bool) -> String:
+# The tool's answer. A message must hold no quote or backslash: it sits inside a JSON string twice.
+def decided(allowed: Bool, message: String) -> String:
   match allowed:
     case True{}:
       "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"behavior\\\":\\\"allow\\\"}\"}]}"
     case False{}:
-      "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"behavior\\\":\\\"deny\\\",\\\"message\\\":\\\"The person did not allow it. Don't do it; go on without it.\\\"}\"}]}"
+      "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"behavior\\\":\\\"deny\\\",\\\"message\\\":\\\"" ++ message ++ "\\\"}\"}]}"
 
 # Every message but a call is answered at once: hello, the tool list, or an empty result.
 def reply.at(+msg: String, init: Bool, list: Bool) -> String:
@@ -121,9 +122,20 @@ def reply.at(+msg: String, init: Bool, list: Bool) -> String:
 def reply(+msg: String) -> String:
   reply.at(msg, String.eq(method(msg), "initialize"), String.eq(method(msg), "tools/list"))
 
-# A call's answer, once the person answered: "allow" lets it run, anything else doesn't.
+# What the page writes back: the person's answer, one word.
+def allow_word() -> String: "allow"
+def session_word() -> String: "session"
+def deny_word() -> String: "deny"
+
+def lets_run(+said: String) -> Bool:
+  (String.eq(String.trim(said), allow_word()) || String.eq(String.trim(said), session_word()))
+
+def keeps(+said: String) -> Bool:
+  String.eq(String.trim(said), session_word())
+
+# A call's answer, once the person answered: allow or session lets it run, anything else doesn't.
 def answer(+msg: String, +said: String) -> String:
-  rpc(id(msg), decided(String.eq(String.trim(said), "allow")))
+  rpc(id(msg), decided(lets_run(said), "The person did not allow it. Don't do it; go on without it."))
 
 # ---------- The question, while Claude waits ----------
 
@@ -134,9 +146,9 @@ def question_file(+turn: String) -> String:
 def answer_file(+turn: String) -> String:
   "/tmp/laweditor-ask-" ++ Ask.safe_id(turn) ++ ".answer"
 
-# The tool on the first line, then the file or command (a command may hold new lines).
+# What the page shows: the question on the first line, then what would change (a command may hold new lines).
 def question(+msg: String) -> String:
-  tool(msg) ++ "\n" ++ what(msg)
+  Ask.question(tool(msg), what(msg)) ++ "\n" ++ Ask.preview(tool(msg), msg)
 
 # ---------- The gate decides ----------
 # Any agent that wants to act knocks here with the whole action: its tool, and the file or command.
@@ -219,20 +231,78 @@ def verdict(r: Rule) -> Verdict:
     case Rule.AskYou{}:
       Verdict.Ask{}
 
-def pick(hit: Bool, mine: Verdict, later: Verdict) -> Verdict:
+def pick(hit: Bool, mine: Rule, later: Rule) -> Rule:
   match hit:
     case True{}:
       mine
     case False{}:
       later
 
-# The first rule that fits decides. With no rule left, it asks: the gate never says yes on its own.
-def decide(rs: List<&2, Rule>, +tool: String, +what: String, +m: P.Mode, +session: List<&2, String>) -> Verdict:
+# The first rule that fits. With none left, ask: the gate never says yes on its own.
+def first(rs: List<&2, Rule>, +tool: String, +what: String, +m: P.Mode, +session: List<&2, String>) -> Rule:
   match rs:
     case Nil{}:
-      Verdict.Ask{}
+      Rule.AskYou{}
     case +h <> t:
-      pick(fits(h, tool, what, m, session), verdict(h), decide(t, tool, what, m, session))
+      pick(fits(h, tool, what, m, session), h, first(t, tool, what, m, session))
+
+def decide(rs: List<&2, Rule>, +tool: String, +what: String, +m: P.Mode, +session: List<&2, String>) -> Verdict:
+  verdict(first(rs, tool, what, m, session))
+
+# What the agent is told when a rule refuses, so it doesn't try another way.
+def refused(r: Rule) -> String:
+  match r:
+    case Rule.LawForbids{}:
+      "A law of this project forbids it: the chat never changes " ++ guarded() ++ ", by any tool or command. Don't try another way; tell the person."
+    case Rule.ModeForbids{}:
+      "The mode is Only read: nothing but reading. Don't try another way; if it is needed, tell the person to pick Ask before changes."
+    case Rule.AllowedForSession{}:
+      ""
+    case Rule.AskYou{}:
+      ""
+
+# ---------- The session: what the person allowed for this conversation ----------
+# One file per conversation (the page names it), each action ending with the record separator (char 30),
+# since a command may hold new lines. A new conversation starts with none.
+
+def sep() -> Char: Char.from_u32(30)
+
+def session_file(+conv: String) -> String:
+  "/tmp/laweditor-session-" ++ Ask.safe_id(conv) ++ ".allowed"
+
+def session_list(+text: String) -> List<&2, String>:
+  String.split(text, sep())
+
+def session_add(+text: String, +tool: String, +what: String) -> String:
+  text ++ action(tool, what) ++ SCon{sep(), ""}
+
+# ---------- The gate, at a call ----------
+# The rule that decides this call, from the message and the session file's text.
+def rule_for(+msg: String, +m: P.Mode, +session_text: String) -> Rule:
+  first(rules(), tool(msg), what(msg), m, session_list(session_text))
+
+# The answer when a rule decides alone (Yes or No); Ask goes to the person instead.
+def now(+msg: String, r: Rule) -> String:
+  match r:
+    case Rule.LawForbids{}:
+      rpc(id(msg), decided(False{}, refused(Rule.LawForbids{})))
+    case Rule.ModeForbids{}:
+      rpc(id(msg), decided(False{}, refused(Rule.ModeForbids{})))
+    case Rule.AllowedForSession{}:
+      rpc(id(msg), decided(True{}, ""))
+    case Rule.AskYou{}:
+      rpc(id(msg), decided(False{}, "Nobody answered."))
+
+# The session file after the person answered: the action added only for Allow for this session.
+def session_after.at(kept: Bool, +text: String, +msg: String) -> String:
+  match kept:
+    case True{}:
+      session_add(text, tool(msg), what(msg))
+    case False{}:
+      text
+
+def session_after(+text: String, +msg: String, +said: String) -> String:
+  session_after.at(keeps(said), text, msg)
 
 # ---------- The gate, drawn from its rules ----------
 
@@ -367,3 +437,28 @@ def tried() -> List<&2, F.Step>:
      F.Step{"Asks you", F.Person{}, False{}, under(examples(), Verdict.Ask{}, 4n)},
      F.Step{"Allowed, without asking", F.System{}, False{}, under(examples(), Verdict.Yes{}, 4n)}],
     example_steps(examples()))
+
+def is_ask(r: Rule) -> Bool:
+  match r:
+    case Rule.LawForbids{}:
+      False{}
+    case Rule.ModeForbids{}:
+      False{}
+    case Rule.AllowedForSession{}:
+      False{}
+    case Rule.AskYou{}:
+      True{}
+
+# ---------- The card, on the page ----------
+# What the card says once the person answered.
+def note.at(runs: Bool, kept: Bool) -> String:
+  match runs kept:
+    case True{} True{}:
+      "Allowed for this session."
+    case True{} False{}:
+      "Allowed."
+    case False{} _:
+      "Not allowed."
+
+def note(+said: String) -> String:
+  note.at(lets_run(said), keeps(said))

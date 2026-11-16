@@ -13,6 +13,16 @@ What the person asked for, as goals. Each one becomes an iteration when it's pic
 - Codex's answer comes without its own notice ("Reading additional input from stdin...").
 - When a project is done, the chat shows a link that opens its folder on the computer.
 
+## 0.1.8 (2026-11-16)
+
+- **The chat asks Bend before it acts, and the endless question is gone.** In Ask before changes, Claude no longer checks its own list and retries: before an action that isn't on it, it asks LawEditor's interphone (`GATE.bend`, `POST /mcp/<conversation>/<turn>`, `--permission-prompt-tool`) with the whole action and waits, with no time limit. A command made of parts (`touch hello.txt; ls | tr a-z A-Z`) is asked once and runs once.
+- **The gate's rules are one list that runs and draws itself** (`GATE.rules()`): a law forbids it (the chat changing `LAWS.bend`, by edit or by any command naming it), the mode forbids it (Only read: anything but reading), allowed for this session already (the same action, exactly), otherwise ask. `GATE.decide()` runs the list, `GATE.flow()` draws it, and `GATE.tried()` runs it on six actions and groups them by answer: the diagrams "Permission: the gate decides" and "Permission: the gate, tried".
+- **The card shows during the turn**: Allow (this once), Allow for this session (kept on the server for this conversation, until the page reloads), Don't allow. When a rule refuses, the chat is told why, so it doesn't try another way.
+- **Isolation for the chat that asks**: `--safe-mode` turns off MCP servers, the interphone included, so this chat runs with `Policy.claude_isolation_asking()`: none of the person's settings files (permission rules, hooks, plugins), no MCP server but LawEditor's, no skills or commands. A `CLAUDE.md` in the project folder and Claude's own memory for that folder are no longer kept out. Only read keeps `--safe-mode`.
+- **Removed**: the retry flow (`/api/allow`, `--resume`, "Always allow").
+- **Tested in the app**: the card came during the reply; Allow for this session ran the command once; the same command again ran without asking.
+- **Not yet**: the two laws decided on 2026-11-12 (an answer covers exactly what was answered; the chat is refused on `LAWS.bend` before the person is asked) are in the gate's code, not yet in `LAWS.bend`. Codex still can't ask.
+
 ## 0.1.7 (2026-11-12)
 
 - **The harness, drawn from its own code.** `ARCH.bend` is the harness as it is today, as a `FLOW.bend` flow (who acts where); the words for modes, flags and tools are read from `POLICY.bend`, so they follow the code. `DIAGRAMS.bend` turns `HEAR.flow()`, `OFFER.flow()` and `ARCH.flow()` into Mermaid text (`bend DIAGRAMS.bend` prints them; with a URL it sends the ones that changed, from a clean commit only). Each diagram's top node names the commit it came from.

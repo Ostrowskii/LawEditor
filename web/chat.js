@@ -3,9 +3,9 @@
 import C from "../CHAT.bend";
 import H from "../HEAR.bend";
 import E from "../EDITOR.bend";
-import A from "../ASK.bend";
 import P from "../POLICY.bend";
 import O from "../OFFER.bend";
+import G from "../GATE.bend";
 import { mountDiagram } from "bend-ui/diagram";
 import { createMessages } from "./chat/messages.js";
 import { createFace } from "./chat/face.js";
@@ -37,55 +37,58 @@ async function post(path, body) {
 // (GET /api/progress/<id>, read by ASK.bend from the turn's file). Codex has none: its answer comes whole.
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// The gate (GATE.bend) may ask the person during the turn: GET /api/question/<id> holds the question
+// while the agent waits; the card's answer goes to POST /api/answer/<id> and the turn goes on.
+const GATE_ANSWERS = [
+  { label: "Don't allow", value: G.deny_word(), kind: "btn--ghost" },
+  { label: "Allow for this session", value: G.session_word(), kind: "" },
+  { label: "Allow", value: G.allow_word(), kind: "btn--primary" },
+];
+// The card goes after what the chat wrote so far; what it writes after the action comes below the card.
+async function gateAsks(id, asked, reply, wrote) {
+  const [question, ...preview] = asked.split("\n");
+  if (!wrote) reply.el.remove();   // nothing written yet: only the "Reading…" placeholder
+  composer.hold(true);
+  const card = messages.proposal(question, GATE_ANSWERS, preview.join("\n").trim(), "dot dot--warn");
+  const said = await card.ask();
+  await post(`/api/answer/${id}`, said);
+  card.set(G.lets_run(said) ? "dot dot--ok" : "dot", G.note(said));
+  composer.hold(false);
+  const next = messages.theirs(); face.to(next.slot); face.lookAt(next.el);
+  return next;
+}
 async function streamed(path, body, reply) {
   const id = newId();
+  let shownText = "";
   let done = false;
   const poll = (async () => {
     while (!done) {
       await sleep(300);
       if (done) break;
-      try { const text = await (await fetch(`/api/progress/${id}`)).text(); if (!done && text.trim()) reply.live(O.words(H.words(text))); } catch {}
+      try { const text = await (await fetch(`/api/progress/${id}`)).text(); if (!done && text.trim() && text !== shownText) { shownText = text; reply.live(O.words(H.words(text))); } } catch {}
+      try { const r = await fetch(`/api/question/${id}`); const asked = r.ok ? (await r.text()).trim() : ""; if (!done && asked) { reply = await gateAsks(id, asked, reply, !!shownText.trim()); shownText = (await (await fetch(`/api/progress/${id}`)).text()); } } catch {}
     }
   })();
   const res = await post(`${path}/${id}`, body);
   done = true; await poll;
-  return res;
+  return { res, reply };
 }
 const textOf = (res) => res.slice(res.indexOf("\n") + 1).trim() || "The agent didn't answer.";
 
-// Ask before changes (POLICY.bend, ASK.bend): what the chat may not do yet comes back as a question.
-// The person answers on a card; the server resumes the same session with what they allowed.
-// "Always allow" keeps that action allowed for the rest of this session (this page, until it reloads).
-const always = [];   // Claude rules the person allowed for the session, like Edit(//…/GDD.md)
-const ASK_ANSWERS = [
-  { label: "Don't allow", value: A.dont(), kind: "btn--ghost" },
-  { label: "Always allow", value: A.always(), kind: "" },
-  { label: "Allow", value: A.allow(), kind: "btn--primary" },
-];
+// Ask before changes (POLICY.bend, GATE.bend): the chat asks the gate before each action, during the turn,
+// and the card shows then (gateAsks). One conversation per page: "Allow for this session" lasts until it reloads.
+const conversationId = newId();
 async function askFirst(model, reply, extra) {
-  let res = await streamed(`/api/ask/${model}`, always.join("\t") + "\n" + conversation() + extra, reply);
-  while (res.startsWith("ask\n")) {
-    const [, session, grant, question, ...preview] = res.split("\n");
-    reply.el.remove();   // the card takes the reply's place; the answer comes after it
-    composer.hold(true);
-    const card = messages.proposal(question, ASK_ANSWERS, preview.join("\n").trim(), "dot dot--warn");
-    const choice = await card.ask();
-    const allowed = A.allows(choice);
-    if (A.keeps(choice) && !always.includes(grant)) always.push(grant);
-    card.set(allowed ? "dot dot--ok" : "dot", allowed ? (A.keeps(choice) ? "Allowed for this session." : "Allowed.") : "Not allowed.");
-    composer.hold(false);
-    reply = messages.theirs(); face.to(reply.slot); face.lookAt(reply.el);
-    const grants = allowed && !always.includes(grant) ? [...always, grant] : always;
-    res = await streamed(`/api/allow/${model}`, session + "\n" + (allowed ? "yes" : "no") + "\n" + grants.join("\t"), reply);
-  }
-  return { reply, answer: textOf(res) };
+  const turn = await streamed(`/api/ask/${model}/${conversationId}`, conversation() + extra, reply);
+  return { reply: turn.reply, answer: textOf(turn.res) };
 }
 
 // extra: a line for the chat after the conversation (after Switch, OFFER.told()).
 async function ask(reply, extra = "") {
   const { ai, model } = models.get();
   if (P.mode_asks_at(chatMode.get())) return askFirst(model, reply, extra);
-  return { reply, answer: textOf(await streamed(`/api/chat/${ai}/${model}`, conversation() + extra, reply)) };
+  const turn = await streamed(`/api/chat/${ai}/${model}`, conversation() + extra, reply);
+  return { reply: turn.reply, answer: textOf(turn.res) };
 }
 // What the person reads: the reply without its LAW: and MODE: lines (HEAR.bend, OFFER.bend).
 const shown = (text) => O.words(H.words(text));

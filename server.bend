@@ -284,10 +284,10 @@ def progress(id: String) -> IO(String):
     text : String <- read_file(Ask.turn_file(id))
     return ok_text(Ask.progress(text))
 
-# ---------- The chat that asks (Ask before changes: POLICY.bend, ASK.bend) ----------
-# Only Claude: it runs with --permission-prompts none, so what isn't allowed is refused and its
-# stream-json output says what it wanted. The page asks the person; on their answer the server resumes
-# the same session (--resume), with the actions they allowed. LAWS.bend stays denied (Policy.never).
+# ---------- The chat that asks (Ask before changes: POLICY.bend, GATE.bend) ----------
+# Before an action that isn't on its list, Claude asks LawEditor's interphone (POST /mcp/<conversation>/<turn>)
+# and waits; the gate decides, or asks the person on the page. No retry, no --resume. LAWS.bend stays denied
+# twice: Claude's own list (Policy.never) and the gate's first rule.
 
 # xs, then rest: the args lists are built as one.
 def with_each(xs: List<&2, String>, rest: List<String>) -> List<String>:
@@ -297,27 +297,13 @@ def with_each(xs: List<&2, String>, rest: List<String>) -> List<String>:
     case h <> t:
       h <> with_each(t, rest)
 
-# The grants the page sends, one per tab; an empty one is no grant.
-def grants.keep(empty: Bool, h: String, rest: List<&2, String>) -> List<&2, String>:
-  match empty:
-    case True{}:
-      rest
-    case False{}:
-      h <> rest
+# Where the server listens; Claude's interphone address is built from it.
+def port() -> U32: 4280
+def address() -> String: "127.0.0.1:" ++ U32.show(port())
 
-def grants.of(xs: List<&2, String>) -> List<&2, String>:
-  match xs:
-    case Nil{}:
-      []
-    case +h <> t:
-      grants.keep(String.is_empty(h), h, grants.of(t))
-
-def ask_args.tail(has_session: Bool, session: String) -> List<String>:
-  match has_session:
-    case True{}:
-      ["--permission-prompts", "none", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--resume", session]
-    case False{}:
-      ["--permission-prompts", "none", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+# Where Claude finds the interphone: this server, at this conversation and turn.
+def mcp_config(+conv: String, +turn: String) -> String:
+  "{\"mcpServers\":{\"laweditor\":{\"type\":\"http\",\"url\":\"http://" ++ address() ++ "/mcp/" ++ Ask.safe_id(conv) ++ "/" ++ Ask.safe_id(turn) ++ "\"}}}"
 
 def ask_args.model(has_model: Bool, model: String, rest: List<String>) -> List<String>:
   match has_model:
@@ -326,31 +312,31 @@ def ask_args.model(has_model: Bool, model: String, rest: List<String>) -> List<S
     case False{}:
       rest
 
-def ask_args(+model: String, grants: String, +session: String, prompt: String) -> List<String>:
-  "-p" <> prompt <> Policy.claude_isolation() <> ask_args.model(Bool.not(String.is_empty(model)), model,
-    "--allowedTools" <> Policy.claude_tools(Policy.chat()) <> with_each(grants.of(String.split(grants, '\t')),
-    "--disallowedTools" <> with_each(Policy.never(), ask_args.tail(Bool.not(String.is_empty(session)), session))))
+def ask_args(+model: String, +conv: String, +turn: String, prompt: String) -> List<String>:
+  "-p" <> prompt <> with_each(Policy.claude_isolation_asking(), ask_args.model(Bool.not(String.is_empty(model)), model,
+    "--allowedTools" <> Policy.claude_tools(Policy.chat()) <> "--disallowedTools" <> with_each(Policy.never(),
+    ["--permission-prompts", "host", "--permission-prompt-tool", "mcp__laweditor__approve", "--mcp-config", mcp_config(conv, turn),
+     "--output-format", "stream-json", "--verbose", "--include-partial-messages"])))
 
 def ask_reply(agent: U32 & String) -> String:
   (+code, +out) = agent
-  pick(U32.is_eq(code, 127), ok_text("error\nCould not start the agent: " ++ out), ok_text(Ask.reply(out)))
+  pick(U32.is_eq(code, 127), ok_text("error\nCould not start the agent: " ++ out), ok_text("ok\n" ++ Ask.result_or(out)))
 
-# POST /api/ask/<model>/<id>, body "<grants, by tab>\n<the conversation>": a new turn of the chat.
+# POST /api/ask/<model>/<conversation>/<turn>, body: the conversation. A turn of the chat that asks.
+# No time limit: while the person hasn't answered, Claude waits, and so does this.
+def ask.go(+model: String, +conv: String, +turn: String, prompt: String) -> IO(String):
+  do IO<String>:
+    agent : U32 & String <- run_to(Ask.turn_file(turn), "claude", ask_args(model, conv, turn, prompt), 4294967295)
+    return ask_reply(agent)
+
 def ask(+target: String, +agent_md: String, +body: String) -> IO(String):
   do IO<String>:
     rules : String <- read_file(chat_md(agent_md))
     skill : String <- read_file(hear_md(agent_md))
-    agent : U32 & String <- run_to(Ask.turn_file(nth(String.split(target, '/'), 1n)), "claude", ask_args(nth(String.split(target, '/'), 0n), Models.upto(body, '\n'), "", rules ++ "\n\n" ++ Policy.mode_section(Policy.Mode.AskBeforeChanges{}) ++ "\n\n" ++ skill ++ "\n\n## Chat\n\n" ++ Ask.after(body, "\n")), 600000)
-    return ask_reply(agent)
-
-# POST /api/allow/<model>/<id>, body "<session>\n<yes or no>\n<grants, by tab>": the person answered; the session goes on.
-def allow(+target: String, +body: String) -> IO(String):
-  do IO<String>:
-    agent : U32 & String <- run_to(Ask.turn_file(nth(String.split(target, '/'), 1n)), "claude", ask_args(nth(String.split(target, '/'), 0n), nth(String.split(body, '\n'), 2n), nth(String.split(body, '\n'), 0n), Ask.told(String.eq(nth(String.split(body, '\n'), 1n), "yes"), nth(String.split(body, '\n'), 2n))), 600000)
-    return ask_reply(agent)
+    ask.go(nth(String.split(target, '/'), 0n), nth(String.split(target, '/'), 1n), nth(String.split(target, '/'), 2n), rules ++ "\n\n" ++ Policy.mode_section(Policy.Mode.AskBeforeChanges{}) ++ "\n\n" ++ skill ++ "\n\n## Chat\n\n" ++ body)
 
 # ---------- The interphone (GATE.bend; NEXT.md, 0.1.8) ----------
-# Claude asks POST /mcp/<turn> before an action that isn't on its list, and waits. The question goes to
+# Claude asks POST /mcp/<conversation>/<turn> before an action that isn't on its list, and waits. The question goes to
 # a file the page reads; the server waits for the answer file, with no time limit, as Claude does.
 
 def json(body: String) -> String:
@@ -369,27 +355,65 @@ def wait(fuel: Nat, +path: String, said: String) -> IO(String):
         got : String <- read_file(path)
         wait(f, path, String.trim(got))
 
-def mcp.call(+turn: String, +msg: String) -> IO(String):
+# The person answers: the question goes to a file the page reads, and the answer comes back in another.
+# Allow for this session adds the action to the conversation's session file.
+def mcp.heard(+conv: String, +turn: String, +msg: String, +text: String, +said: String) -> IO(String):
+  do IO<String>:
+    write_file(Gate.question_file(turn), "")
+    write_file(Gate.answer_file(turn), "")
+    write_file(Gate.session_file(conv), Gate.session_after(text, msg, said))
+    return json(Gate.answer(msg, said))
+
+def mcp.person(+conv: String, +turn: String, +msg: String, +text: String) -> IO(String):
   do IO<String>:
     write_file(Gate.answer_file(turn), "")
     write_file(Gate.question_file(turn), Gate.question(msg))
     said : String <- wait(4294967295n, Gate.answer_file(turn), "")
-    write_file(Gate.question_file(turn), "")
-    write_file(Gate.answer_file(turn), "")
-    return json(Gate.answer(msg, said))
+    mcp.heard(conv, turn, msg, text, said)
 
-def mcp.at(notice: Bool, call: Bool, +turn: String, +msg: String) -> IO(String):
+def mcp.by(ask: Bool, r: Gate.Rule, +conv: String, +turn: String, +msg: String, +text: String) -> IO(String):
+  match ask:
+    case True{}:
+      mcp.person(conv, turn, msg, text)
+    case False{}:
+      IO.pure(String, json(Gate.now(msg, r)))
+
+def mcp.ruled(+conv: String, +turn: String, +msg: String, +text: String) -> IO(String):
+  mcp.by(Gate.is_ask(Gate.rule_for(msg, Policy.Mode.AskBeforeChanges{}, text)), Gate.rule_for(msg, Policy.Mode.AskBeforeChanges{}, text), conv, turn, msg, text)
+
+# The gate decides (GATE.rules): a law or the mode refuses, the session allows, or the person is asked.
+# Only the chat that asks reaches the interphone, so its mode is Ask before changes.
+def mcp.call(+conv: String, +turn: String, +msg: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(Gate.session_file(conv))
+    mcp.ruled(conv, turn, msg, text)
+
+def mcp.at(notice: Bool, call: Bool, +conv: String, +turn: String, +msg: String) -> IO(String):
   match notice call:
     case True{} _:
       IO.pure(String, http("202 Accepted", "text/plain; charset=utf-8", ""))
     case False{} True{}:
-      mcp.call(turn, msg)
+      mcp.call(conv, turn, msg)
     case False{} False{}:
       IO.pure(String, json(Gate.reply(msg)))
 
-# POST /mcp/<turn>: one MCP message.
-def mcp(+turn: String, +msg: String) -> IO(String):
-  mcp.at(Gate.is_notice(msg), Gate.is_call(msg), turn, msg)
+# POST /mcp/<conversation>/<turn>: one MCP message.
+def mcp(+target: String, +msg: String) -> IO(String):
+  mcp.at(Gate.is_notice(msg), Gate.is_call(msg), nth(String.split(target, '/'), 0n), nth(String.split(target, '/'), 1n), msg)
+
+# GET /api/question/<turn>: the question waiting for the person in this turn, or nothing.
+def question(+turn: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(Gate.question_file(turn))
+    return ok_text(text)
+
+# POST /api/answer/<turn>, body: allow, session or deny (GATE.allow_word…). The waiting call reads it.
+# The question goes away at once, so the page doesn't show it twice.
+def person_answer(+turn: String, body: String) -> IO(String):
+  do IO<String>:
+    write_file(Gate.question_file(turn), "")
+    write_file(Gate.answer_file(turn), body)
+    return ok_text("ok")
 
 # The models an AI offers, asked to its own CLI (MODELS.bend reads the answer). Only claude and codex.
 def is_ai(+ai: String) -> Bool:
@@ -534,7 +558,7 @@ def route_get.debug(is_check: Bool, +path: String, dist: String, +agent_md: Stri
     case False{}:
       route_get.debug_laws(String.eq(path, "/api/debug/LAWS.bend"), path, dist, agent_md)
 
-# GET /mcp/<turn>: the interphone sends nothing on its own (no event stream).
+# GET /mcp/<conversation>/<turn>: the interphone sends nothing on its own (no event stream).
 def route_get.mcp(is_mcp: Bool, +path: String, dist: String, +agent_md: String) -> IO(String):
   match is_mcp:
     case True{}:
@@ -542,8 +566,15 @@ def route_get.mcp(is_mcp: Bool, +path: String, dist: String, +agent_md: String) 
     case False{}:
       route_get.debug(String.eq(path, "/api/debug/check"), path, dist, agent_md)
 
+def route_get.question(is_q: Bool, +path: String, dist: String, +agent_md: String) -> IO(String):
+  match is_q:
+    case True{}:
+      question(after(path, "/api/question/"))
+    case False{}:
+      route_get.mcp(String.starts_with(path, "/mcp/"), path, dist, agent_md)
+
 def route_get(+path: String, dist: String, +agent_md: String) -> IO(String):
-  route_get.mcp(String.starts_with(path, "/mcp/"), path, dist, agent_md)
+  route_get.question(String.starts_with(path, "/api/question/"), path, dist, agent_md)
 
 # POST: /api/generate/<ai> (body: the sentence), /api/chat/<ai>/<model> (body: the conversation),
 # /api/file/<name> (body: the file).
@@ -580,19 +611,13 @@ def route_post.chat(is_chat: Bool, +path: String, body: String, agent_md: String
     case False{}:
       route_post.generate(String.starts_with(path, "/api/generate/"), path, body, agent_md)
 
-def route_post.allow(is_allow: Bool, +path: String, body: String, agent_md: String) -> IO(String):
-  match is_allow:
-    case True{}:
-      allow(after(path, "/api/allow/"), body)
-    case False{}:
-      route_post.chat(String.starts_with(path, "/api/chat/"), path, body, agent_md)
 
 def route_post.ask(is_ask: Bool, +path: String, body: String, agent_md: String) -> IO(String):
   match is_ask:
     case True{}:
       ask(after(path, "/api/ask/"), agent_md, body)
     case False{}:
-      route_post.allow(String.starts_with(path, "/api/allow/"), path, body, agent_md)
+      route_post.chat(String.starts_with(path, "/api/chat/"), path, body, agent_md)
 
 def route_post.mcp(is_mcp: Bool, +path: String, +body: String, agent_md: String) -> IO(String):
   match is_mcp:
@@ -601,8 +626,15 @@ def route_post.mcp(is_mcp: Bool, +path: String, +body: String, agent_md: String)
     case False{}:
       route_post.ask(String.starts_with(path, "/api/ask/"), path, body, agent_md)
 
-def route_post(+path: String, body: String, agent_md: String) -> IO(String):
-  route_post.mcp(String.starts_with(path, "/mcp/"), path, body, agent_md)
+def route_post.answer(is_a: Bool, +path: String, +body: String, agent_md: String) -> IO(String):
+  match is_a:
+    case True{}:
+      person_answer(after(path, "/api/answer/"), body)
+    case False{}:
+      route_post.mcp(String.starts_with(path, "/mcp/"), path, body, agent_md)
+
+def route_post(+path: String, +body: String, agent_md: String) -> IO(String):
+  route_post.answer(String.starts_with(path, "/api/answer/"), path, body, agent_md)
 
 def route.at(is_post: Bool, +req: String, dist: String, agent_md: String) -> IO(String):
   match is_post:
@@ -761,6 +793,6 @@ def main() -> IO(Unit):
     ensure_file("GDD.md", "")
     ensure_file("TYPES.bend", "import Base\n")
     ensure_file("LAWS.bend", "import Base\nimport ./TYPES.bend as T\n")
-    l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", 4280))
-    IO.print("LawEditor: http://127.0.0.1:4280")
+    l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", port()))
+    IO.print("LawEditor: http://" ++ address())
     start(args, l)

@@ -1,10 +1,5 @@
-# LawEditor: the chat asks before it acts (HARNESS.md, "Ask before changes"). Pure; server.bend runs Claude.
-#
-# Claude runs with --permission-prompts none: what its tools don't allow is refused, and its
-# stream-json output says so: {"subtype":"permission_denied","tool_name":"Edit","tool_use_id":"…"}.
-# The tool call itself came earlier: {"type":"tool_use","id":"…","name":"Edit","input":{…}}.
-# This reads both and turns them into a question for the person. If they allow it, the server
-# resumes the same session (--resume) with that one action allowed.
+# LawEditor: reading what Claude sends: an action's tool, file or command, and what the person reads about it
+# (GATE.bend asks with these), and a turn's answer while it is written. Pure; server.bend runs Claude.
 
 import Base
 import ./MODELS.bend as Models
@@ -67,25 +62,7 @@ def base_name.of(m: Maybe<&2, String>, path: String) -> String:
 def base_name(+path: String) -> String:
   base_name.of(List.last(&2, String, String.split(path, '/')), path)
 
-# ---------- What Claude's output says ----------
-
-def session(+out: String) -> String:
-  field(out, "session_id")
-
-# Was an action refused because it needs the person's yes?
-def denied(+out: String) -> Bool:
-  String.contains(out, "\"subtype\":\"permission_denied\"")
-
-# The refused action, from the denial on: its tool, and its call id.
-def denial(+out: String) -> String:
-  after(out, "\"subtype\":\"permission_denied\"")
-
-def tool(+out: String) -> String:
-  field(denial(out), "tool_name")
-
-# The input of the refused call: what comes after its id.
-def input(+out: String) -> String:
-  after(out, "\"id\":\"" ++ field(denial(out), "tool_use_id") ++ "\"")
+# ---------- An action ----------
 
 def is_file_tool(+t: String) -> Bool:
   (String.eq(t, "Edit") || String.eq(t, "Write"))
@@ -100,21 +77,6 @@ def target.of(+inp: String, file: Bool) -> String:
 
 def target(+t: String, +inp: String) -> String:
   target.of(inp, is_file_tool(t))
-
-# The one action the person allows, as a Claude rule: Edit(//abs/path), Bash(exact command), or the tool.
-# (In Claude's rules, //path is a path from the root of the disk.) A file rule is always Edit: Claude's Edit
-# rules cover every tool that changes a file, Write included; a Write(…) rule doesn't let Write run.
-def grant.of(+t: String, +what: String, file: Bool, bash: Bool) -> String:
-  match file bash:
-    case True{} _:
-      "Edit(/" ++ what ++ ")"
-    case False{} True{}:
-      "Bash(" ++ what ++ ")"
-    case False{} False{}:
-      t
-
-def grant(+t: String, +what: String) -> String:
-  grant.of(t, what, is_file_tool(t), String.eq(t, "Bash"))
 
 # What the person reads: the question, and what would change.
 def question.of(+t: String, +what: String, edit: Bool, write: Bool, bash: Bool) -> String:
@@ -209,39 +171,3 @@ def result_or.at(+out: String, has: Bool) -> String:
 def result_or(+out: String) -> String:
   result_or.at(out, String.contains(out, "\"result\":\""))
 
-# What the page gets. "ask" lines: session, grant, question, then the preview (it may span lines).
-def reply.ask(+out: String) -> String:
-  "ask\n" ++ session(out) ++ "\n" ++ grant(tool(out), target(tool(out), input(out))) ++ "\n" ++
-  question(tool(out), target(tool(out), input(out))) ++ "\n" ++ preview(tool(out), input(out))
-
-def reply.at(+out: String, asks: Bool) -> String:
-  match asks:
-    case True{}:
-      reply.ask(out)
-    case False{}:
-      "ok\n" ++ result_or(out)
-
-def reply(+out: String) -> String:
-  reply.at(out, denied(out))
-
-# ---------- The person's answer ----------
-
-def allow() -> U32: 0
-def always() -> U32: 1
-def dont() -> U32: 2
-
-# Does the answer let the action run? Is it kept for the rest of the session?
-def allows(+a: U32) -> Bool:
-  (U32.is_eq(a, 0) || U32.is_eq(a, 1))
-
-def keeps(+a: U32) -> Bool:
-  U32.is_eq(a, 1)
-
-# What the chat is told when its session resumes. Claude's denial said "don't retry, it will be denied
-# for the rest of this session"; once allowed, it must hear that this changed, or it won't try again.
-def told(allowed: Bool, +grants: String) -> String:
-  match allowed:
-    case True{}:
-      "The person allowed it: you now have permission for " ++ String.join(String.split(grants, '\t'), ", ") ++ ". The earlier denial no longer applies. Try that action again."
-    case False{}:
-      "The person did not allow it. Don't do it; answer them without it."
