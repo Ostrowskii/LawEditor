@@ -13,6 +13,14 @@ What the person asked for, as goals. Each one becomes an iteration when it's pic
 - Codex's answer comes without its own notice ("Reading additional input from stdin...").
 - When a project is done, the chat shows a link that opens its folder on the computer.
 
+## 0.1.9 (2026-11-17)
+
+- **Allowed in this chat, in the mode's menu.** In a mode that asks, the mode button carries the count ("Ask before changes · 3 allowed"), and its menu shows what the person allowed for this conversation: newest first, each row with its kind (Run, Edit, Write) and the exact action, a Find… field, × to take one back and "Stop allowing all". The list shows 8 rows and scrolls inside the menu (Bend-UI 1.1.10's menu with a list). Anything else still asks.
+- **Bend decides what the menu shows** (`GATE.bend`, `allowed_*`): the list read from the session file, the count, each row's kind, tone and text, finding, and taking back one action or all of them. `server.bend` answers `GET /api/allowed/<conversation>` and `POST /api/allowed/<conversation>` (body: the action, or `all`).
+- **Bend-UI 1.0.3 → 1.1.10.** Follow is gone from the lib (1.0.16), so the laws screen no longer scrolls along while laws are generated. Tones and dots use the lib's new names (success, warning, danger); nothing looks different.
+- **Tested in the app**: Allow for this session put "1 allowed" on the button and the row in the menu; × took it back, and the same command asked again.
+- **Not yet**: chat replies are shown as plain text, not Markdown. The two laws decided on 2026-11-12 are still not in `LAWS.bend`.
+
 ## 0.1.8 (2026-11-16)
 
 - **The chat asks Bend before it acts, and the endless question is gone.** In Ask before changes, Claude no longer checks its own list and retries: before an action that isn't on it, it asks LawEditor's interphone (`GATE.bend`, `POST /mcp/<conversation>/<turn>`, `--permission-prompt-tool`) with the whole action and waits, with no time limit. A command made of parts (`touch hello.txt; ls | tr a-z A-Z`) is asked once and runs once.

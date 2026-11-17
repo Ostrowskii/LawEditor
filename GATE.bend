@@ -276,6 +276,158 @@ def session_list(+text: String) -> List<&2, String>:
 def session_add(+text: String, +tool: String, +what: String) -> String:
   text ++ action(tool, what) ++ SCon{sep(), ""}
 
+# ---------- What you allowed, on the page ----------
+# The mode's menu (web/chat/mode.js) shows the actions kept for this conversation, newest first, finds in
+# them, and takes one back (the server writes the file without it) or all (an empty file). A taken-back
+# action asks again next time.
+
+def allowed.keep(+s: String, rest: List<&2, String>) -> List<&2, String>:
+  match s:
+    case SNil{}:
+      rest
+    case SCon{h, t}:
+      s <> rest
+
+def allowed.nonempty(xs: List<&2, String>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      allowed.keep(h, allowed.nonempty(t))
+
+# Newest first: the file keeps them in the order they were allowed.
+def allowed_list(+text: String) -> List<&2, String>:
+  List.reverse(&2, String, allowed.nonempty(session_list(text)))
+
+def allowed.size(xs: List<&2, String>) -> U32:
+  match xs:
+    case Nil{}:
+      0
+    case h <> t:
+      (1 + allowed.size(t) : U32)
+
+def allowed_count(+text: String) -> U32:
+  allowed.size(allowed_list(text))
+
+def allowed.at.go(xs: List<&2, String>, here: Bool, +i: U32) -> String:
+  match xs here:
+    case Nil{} _:
+      ""
+    case (+h <> t) True{}:
+      h
+    case (h <> t) False{}:
+      allowed.at.go(t, U32.is_eq(i, 1), (i - 1 : U32))
+
+# The i-th action, newest first (0 is the newest), as kept: the tool, a new line, the file or command.
+def allowed_at(+text: String, +i: U32) -> String:
+  allowed.at.go(allowed_list(text), U32.is_eq(i, 0), i)
+
+def allowed.tool.go(s: String, here: Bool, acc: String) -> String:
+  match s here:
+    case SNil{} _:
+      String.reverse(acc)
+    case SCon{h, t} True{}:
+      String.reverse(acc)
+    case SCon{+h, +t} False{}:
+      allowed.tool.go(t, String.starts_with(t, "\n"), SCon{h, acc})
+
+def allowed.what.go(s: String, here: Bool) -> String:
+  match s here:
+    case SNil{} _:
+      ""
+    case SCon{h, t} True{}:
+      t
+    case SCon{h, +t} False{}:
+      allowed.what.go(t, String.starts_with(t, "\n"))
+
+def allowed_tool(+entry: String) -> String:
+  allowed.tool.go(entry, String.starts_with(entry, "\n"), "")
+
+def allowed_what(+entry: String) -> String:
+  allowed.what.go(entry, String.starts_with(entry, "\n"))
+
+# The word that leads a row: a command runs; a file tool keeps its name.
+def allowed.kind.at(bash: Bool, +tool: String) -> String:
+  match bash:
+    case True{}:
+      "Run"
+    case False{}:
+      tool
+
+def allowed_kind(+entry: String) -> String:
+  allowed.kind.at(String.eq(allowed_tool(entry), "Bash"), allowed_tool(entry))
+
+# Its tone (Bend-UI's menu__lead--<tone>): edits in accent, new files in warning, commands plain.
+def allowed.tone.at(edit: Bool, write: Bool) -> String:
+  match edit write:
+    case True{} _:
+      "accent"
+    case False{} True{}:
+      "warning"
+    case False{} False{}:
+      ""
+
+def allowed_tone(+entry: String) -> String:
+  allowed.tone.at(String.eq(allowed_tool(entry), "Edit"), String.eq(allowed_tool(entry), "Write"))
+
+# The whole action in words, for the row's title (a long command ends in "…" on the row).
+def allowed_title(+entry: String) -> String:
+  allowed_kind(entry) ++ ": " ++ allowed_what(entry)
+
+def allowed.lower(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{h, t}:
+      SCon{Char.to_lower(h), allowed.lower(t)}
+
+# Find…: the row shows when its words hold what the person typed, in any case. Nothing typed shows all.
+def allowed_matches(+entry: String, +query: String) -> Bool:
+  String.contains(allowed.lower(allowed_title(entry)), allowed.lower(String.trim(query)))
+
+def allowed_tag(+n: U32) -> String:
+  U32.show(n) ++ " allowed"
+
+def allowed.count.at(all: Bool, +shown: U32, +total: U32) -> String:
+  match all:
+    case True{}:
+      U32.show(total)
+    case False{}:
+      U32.show(shown) ++ " of " ++ U32.show(total)
+
+# The count by the menu's title: all of them, or "3 of 49" while finding.
+def allowed_count_text(+shown: U32, +total: U32, +query: String) -> String:
+  allowed.count.at(String.eq(String.trim(query), ""), shown, total)
+
+def allowed.drop.at(skip: Bool, +h: String, rest: String) -> String:
+  match skip:
+    case True{}:
+      rest
+    case False{}:
+      h ++ SCon{sep(), ""} ++ rest
+
+def allowed.drop(xs: List<&2, String>, +entry: String) -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case +h <> t:
+      allowed.drop.at((String.eq(h, entry) || String.eq(h, "")), h, allowed.drop(t, entry))
+
+# Taking back this word takes back all of them (an action always holds a new line, so it is never this).
+# The server doesn't wait for an empty body, so "all" is a word.
+def allowed_all_word() -> String: "all"
+
+# The file without one action (taken back), or empty after taking back all.
+def allowed.without.at(all: Bool, +text: String, +entry: String) -> String:
+  match all:
+    case True{}:
+      ""
+    case False{}:
+      allowed.drop(session_list(text), entry)
+
+def allowed_without(+text: String, +entry: String) -> String:
+  allowed.without.at(String.eq(entry, allowed_all_word()), text, entry)
+
 # ---------- The gate, at a call ----------
 # The rule that decides this call, from the message and the session file's text.
 def rule_for(+msg: String, +m: P.Mode, +session_text: String) -> Rule:
@@ -365,7 +517,7 @@ def flow.of(+n: Nat) -> List<&2, F.Step>:
       [F.Step{"It runs", F.Cli{}, False{}, []},
        F.Step{"Refused; the chat goes on without it", F.Cli{}, False{}, []},
        F.Step{"Allow / Allow for this session / Don't allow", F.Person{}, False{}, [F.Go{runs_at(n), "Allow"}, F.Go{keeps_at(n), "Allow for this session"}, F.Go{refused_at(n), "Don't allow"}]},
-       F.Step{"Bend keeps the exact action until the conversation ends", F.System{}, False{}, [F.Go{runs_at(n), ""}]}]))
+       F.Step{"Bend keeps the exact action until the conversation ends or you take it back (the mode's menu: Allowed in this chat)", F.System{}, False{}, [F.Go{runs_at(n), ""}]}]))
 
 def flow() -> List<&2, F.Step>:
   flow.of(size(rules()))

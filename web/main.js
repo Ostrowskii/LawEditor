@@ -4,7 +4,6 @@
 import { isNarrow } from "bend-ui";
 import { mountAgent, flyBetween } from "bend-ui/agent";
 import { createThread, openBlock, formBlock } from "bend-ui/thread";
-import { createFollow } from "bend-ui/follow";
 import claudeMark from "bend-ui/brand/claude.webp";
 import openaiMark from "bend-ui/brand/openai.svg";
 import E from "../EDITOR.bend";
@@ -50,7 +49,7 @@ const lawFor = (text) => laws.find((l) => l.sentence === text.trim());
 // =========================================================
 
 const S = { title: E.title(), empty: E.empty(), busy: E.busy(), ok: E.ok(), error: E.error() };
-const DOT = { [S.empty]: "dot", [S.busy]: "dot dot--busy", [S.ok]: "dot dot--ok", [S.error]: "dot dot--error" };
+const DOT = { [S.empty]: "dot", [S.busy]: "dot dot--busy", [S.ok]: "dot dot--success", [S.error]: "dot dot--danger" };
 let current = null;
 let running = false;
 
@@ -177,9 +176,8 @@ function syncGen() {
   document.querySelectorAll(".agent__item[data-id='claude'], .agent__item[data-id='codex']").forEach((b) => b.disabled = running);
 }
 
-// The thread ties each sentence to its law while the agent works; the page follows (Bend-UI).
+// The thread ties each sentence to its law while the agent works (Bend-UI).
 const thread = createThread(doc);
-const follow = createFollow(document.querySelector(".page"), { button: $("follow") });
 
 $("gen").addEventListener("click", async () => {
   if (!conn.active) { const a = visible(); a.open(); a.ask(true); return; }   // no AI yet: ask for one
@@ -190,7 +188,6 @@ $("gen").addEventListener("click", async () => {
   for (const [i, b] of list.entries()) {
     if (!conn.active || !b.isConnected) continue;
     const sentence = textOf(b);
-    follow.to(b.parentElement);
     agents.lg.lookAtEl(b); agents.sm.lookAtEl(b);
     await Promise.all([setState(b, S.busy, "", "open"), thread.start(i)]);
     const { good, out } = await writeLaw(sentence);
@@ -198,9 +195,7 @@ $("gen").addEventListener("click", async () => {
     const edited = textOf(b) !== sentence;
     const next = E.after_result(edited, good);
     await Promise.all([setState(b, next, next === S.empty ? "" : out, "form"), thread.done(i, next === S.ok)]);
-    follow.to(b.parentElement);
   }
-  follow.stop();
   agents.lg.lookAtEl(null); agents.sm.lookAtEl(null);
   running = false; syncGen();
   await thread.end();
@@ -336,7 +331,7 @@ function renderLaws() {
     const orphan = !inDoc.has(l.sentence);   // its sentence was deleted: keep the law, flag it
     const b = document.createElement("div");
     b.className = "block";
-    b.innerHTML = `<div class="block__slot"><span class="dot ${orphan ? "dot--warn" : "dot--ok"}"></span></div><div class="block__text"></div><pre class="block__out"></pre>`;
+    b.innerHTML = `<div class="block__slot"><span class="dot ${orphan ? "dot--warning" : "dot--success"}"></span></div><div class="block__text"></div><pre class="block__out"></pre>`;
     b.querySelector(".block__text").textContent = l.sentence + (orphan ? "  (sentence deleted)" : "");
     b.querySelector(".block__out").textContent = l.code.split("\n").slice(1).join("\n");
     list.append(b);

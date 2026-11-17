@@ -415,6 +415,24 @@ def person_answer(+turn: String, body: String) -> IO(String):
     write_file(Gate.answer_file(turn), body)
     return ok_text("ok")
 
+# GET /api/allowed/<conversation>: what the person allowed for it (GATE.session_file), for the mode's menu.
+def allowed_get(+conv: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(Gate.session_file(conv))
+    return ok_text(text)
+
+def allowed_post.write(+conv: String, +left: String) -> IO(String):
+  do IO<String>:
+    write_file(Gate.session_file(conv), left)
+    return ok_text(left)
+
+# POST /api/allowed/<conversation>, body: one action to take back (GATE.allowed_without), or "all"
+# (GATE.allowed_all_word). Answers what is left.
+def allowed_post(+conv: String, body: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(Gate.session_file(conv))
+    allowed_post.write(conv, Gate.allowed_without(text, body))
+
 # The models an AI offers, asked to its own CLI (MODELS.bend reads the answer). Only claude and codex.
 def is_ai(+ai: String) -> Bool:
   (String.eq(ai, "claude") || String.eq(ai, "codex"))
@@ -573,8 +591,15 @@ def route_get.question(is_q: Bool, +path: String, dist: String, +agent_md: Strin
     case False{}:
       route_get.mcp(String.starts_with(path, "/mcp/"), path, dist, agent_md)
 
+def route_get.allowed(is_a: Bool, +path: String, dist: String, +agent_md: String) -> IO(String):
+  match is_a:
+    case True{}:
+      allowed_get(after(path, "/api/allowed/"))
+    case False{}:
+      route_get.question(String.starts_with(path, "/api/question/"), path, dist, agent_md)
+
 def route_get(+path: String, dist: String, +agent_md: String) -> IO(String):
-  route_get.question(String.starts_with(path, "/api/question/"), path, dist, agent_md)
+  route_get.allowed(String.starts_with(path, "/api/allowed/"), path, dist, agent_md)
 
 # POST: /api/generate/<ai> (body: the sentence), /api/chat/<ai>/<model> (body: the conversation),
 # /api/file/<name> (body: the file).
@@ -633,8 +658,15 @@ def route_post.answer(is_a: Bool, +path: String, +body: String, agent_md: String
     case False{}:
       route_post.mcp(String.starts_with(path, "/mcp/"), path, body, agent_md)
 
+def route_post.allowed(is_a: Bool, +path: String, +body: String, agent_md: String) -> IO(String):
+  match is_a:
+    case True{}:
+      allowed_post(after(path, "/api/allowed/"), body)
+    case False{}:
+      route_post.answer(String.starts_with(path, "/api/answer/"), path, body, agent_md)
+
 def route_post(+path: String, +body: String, agent_md: String) -> IO(String):
-  route_post.answer(String.starts_with(path, "/api/answer/"), path, body, agent_md)
+  route_post.allowed(String.starts_with(path, "/api/allowed/"), path, body, agent_md)
 
 def route.at(is_post: Bool, +req: String, dist: String, agent_md: String) -> IO(String):
   match is_post:

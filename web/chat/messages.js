@@ -45,7 +45,7 @@ export function createMessages(list, page) {
 
   // A rule the chat heard (HEAR.bend), under its reply: the sentence as a document block, and the person's answer.
   // answers: [{ label, value, kind }], kind is a Bend-UI button ("btn--primary", "btn--ghost" or "").
-  // The same card asks before the chat acts (ASK.bend): then preview is what would change, and dot is "dot dot--warn".
+  // The same card asks before the chat acts (ASK.bend): then preview is what would change, and dot is "dot dot--warning".
   function proposal(sentence, answers, preview = "", dot = "dot") {
     const m = document.createElement("div");
     m.className = "msg msg--face";

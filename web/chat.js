@@ -24,7 +24,7 @@ const face = createFace();
 const [aiDd, modelDd] = document.querySelectorAll("#composer .composer__bar .dropdown");
 let saved = null; try { saved = localStorage.getItem("laweditor.ai"); } catch {}
 const models = createModels(aiDd, modelDd, saved);
-const chatMode = createMode($("mode"), aiDd, models.get().ai);   // what the chat may do (POLICY.bend, HARNESS.md)
+const chatMode = createMode($("mode"), aiDd, models.get().ai, () => conversationId);   // what the chat may do (POLICY.bend, HARNESS.md)
 
 // The conversation as the agent reads it (AGENT.md, "Chat").
 const conversation = () => said.map((m) => (m.who === C.person() ? "Person: " : "Agent: ") + m.text).join("\n");
@@ -49,10 +49,11 @@ async function gateAsks(id, asked, reply, wrote) {
   const [question, ...preview] = asked.split("\n");
   if (!wrote) reply.el.remove();   // nothing written yet: only the "Reading…" placeholder
   composer.hold(true);
-  const card = messages.proposal(question, GATE_ANSWERS, preview.join("\n").trim(), "dot dot--warn");
+  const card = messages.proposal(question, GATE_ANSWERS, preview.join("\n").trim(), "dot dot--warning");
   const said = await card.ask();
   await post(`/api/answer/${id}`, said);
-  card.set(G.lets_run(said) ? "dot dot--ok" : "dot", G.note(said));
+  card.set(G.lets_run(said) ? "dot dot--success" : "dot", G.note(said));
+  if (G.keeps(said)) setTimeout(chatMode.allowed, 700);   // the gate writes it once the waiting call reads the answer
   composer.hold(false);
   const next = messages.theirs(); face.to(next.slot); face.lookAt(next.el);
   return next;
@@ -102,10 +103,10 @@ const OFFER_ANSWERS = [
 async function offer(answer) {
   if (!O.offers(answer)) return;
   composer.hold(true);   // the talk stops until the person answers (as every question)
-  const card = messages.proposal("Switch to Ask before changes?", OFFER_ANSWERS, "So the chat can build it. It asks before each change.", "dot dot--warn");
+  const card = messages.proposal("Switch to Ask before changes?", OFFER_ANSWERS, "So the chat can build it. It asks before each change.", "dot dot--warning");
   const choice = await card.ask();
   chatMode.set(O.mode_after(choice));
-  card.set(O.switches(choice) ? "dot dot--ok" : "dot", O.switches(choice) ? "Switched to Ask before changes." : "Stayed in Only read.");
+  card.set(O.switches(choice) ? "dot dot--success" : "dot", O.switches(choice) ? "Switched to Ask before changes." : "Stayed in Only read.");
   composer.hold(false);
   if (!O.switches(choice)) return;
   const first = messages.theirs();
@@ -144,7 +145,7 @@ const ANSWERS = [
   { label: "Always add", value: H.always(), kind: "" },
   { label: "Add", value: H.add(), kind: "btn--primary" },
 ];
-const DOT = { [E.empty()]: "dot", [E.busy()]: "dot dot--busy", [E.ok()]: "dot dot--ok", [E.error()]: "dot dot--error" };
+const DOT = { [E.empty()]: "dot", [E.busy()]: "dot dot--busy", [E.ok()]: "dot dot--success", [E.error()]: "dot dot--danger" };
 let queue = Promise.resolve(), writing = Promise.resolve();
 function hear(answer) {
   const n = H.count(answer);
@@ -196,7 +197,7 @@ document.querySelectorAll("#side [data-view]").forEach((b) => b.addEventListener
 // Chat › Context: the offer flow, drawn from OFFER.flow() by Bend-UI's diagram (the code is the source).
 {
   const items = (l) => { const out = []; while (l.$ === "Con") { out.push(l.head); l = l.tail; } return out; };
-  const TONE = { Person: "", Skill: "accent", System: "law" };
+  const TONE = { Person: "", Skill: "accent", System: "success" };
   const steps = items(O.flow());
   mountDiagram($("offer-flow"), {
     nodes: steps.map((s) => ({ label: s.name, tone: TONE[s.who.$], tag: s.writes ? "writes a file" : "" })),
