@@ -10,6 +10,7 @@ import ./MODELS.bend as Models
 import ./POLICY.bend as Policy
 import ./ASK.bend as Ask
 import ./GATE.bend as Gate
+import ./CHAT.bend as Chat
 
 # ---------- Text ----------
 
@@ -148,7 +149,8 @@ def run_out(r: Result<&1, &1, U32 & String, U32 & (String & String)>) -> U32 & S
 
 # Runs a program with its output going to a file as it is written, so another request can read it
 # meanwhile (the chat's answer while it is written: GET /api/progress/<id>). sh only redirects: the
-# file and every arg are passed as arguments ("$0", "$@"), never pasted into the command.
+# file and every arg are passed as arguments ("$0", "$@"), never pasted into the command. It also writes
+# its process id next to the file (<file>.pid), so Stop can end it (POST /api/stop/<id>).
 def run_to.out(r: U32 & String, text: String) -> U32 & String:
   (code, err) = r
   (code, text ++ err)
@@ -160,7 +162,7 @@ def run(program: String, args: List<String>, timeout_ms: U32) -> IO(U32 & String
 
 def run_to(+file: String, program: String, args: List<String>, timeout_ms: U32) -> IO(U32 & String):
   do IO<U32 & String>:
-    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run("sh", "-c" <> "\"$@\" > \"$0\"" <> file <> program <> args, "", 4194304, timeout_ms)
+    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run("sh", "-c" <> "echo $$ > \"$1\"; out=\"$0\"; shift; exec \"$@\" > \"$out\"" <> file <> (file ++ ".pid") <> program <> args, "", 4194304, timeout_ms)
     text : String <- read_file(file)
     return run_to.out(run_out(r), text)
 
@@ -283,6 +285,66 @@ def progress(id: String) -> IO(String):
   do IO<String>:
     text : String <- read_file(Ask.turn_file(id))
     return ok_text(Ask.progress(text))
+
+# GET /api/work/<id>: what the chat did so far in the turn: its actions, plan, files changed, and what it
+# does now (Ask.work, one line each).
+def work(id: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(Ask.turn_file(id))
+    return ok_text(Ask.work(text))
+
+# POST /api/stop/<id>: the person pressed Stop. The turn's process ends; its request answers with what it had.
+def stop(+id: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "kill \"$(cat \"$0\")\"", Ask.turn_file(id) ++ ".pid"], 5000)
+    return ok_text("stopped")
+
+# ---------- Around the chat: the project's files, its folder, the conversations ----------
+# The server runs in the project's folder. The conversations are kept with the project, in .laweditor/chats
+# (a folder the file list leaves out): one file each, its title on the first line, then the conversation.
+
+def files_list.out(r: U32 & String) -> String:
+  (code, out) = r
+  out
+
+# GET /api/files: the project's files, one path per line (for @ in the composer).
+def files_list() -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "find . -type f -not -path '*/.*' | sed 's|^\\./||' | sort | head -300"], 5000)
+    return ok_text(files_list.out(r))
+
+# POST /api/open-folder: opens the project's folder on the computer.
+def open_folder() -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("open", ["."], 5000)
+    return ok_text("ok")
+
+def chat_file(+id: String) -> String:
+  ".laweditor/chats/" ++ Ask.safe_id(id) ++ ".txt"
+
+# POST /api/conversation/<id>, body: the conversation. GET it back; GET /api/conversations lists them.
+def conversation_save(+id: String, +body: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("mkdir", ["-p", ".laweditor/chats"], 5000)
+    write_file(chat_file(id), Chat.title_of(body) ++ "\n" ++ body)
+    return ok_text("ok")
+
+def conversation_get(+id: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(chat_file(id))
+    return ok_text(text)
+
+# One line each, newest first: the id, a tab, the title.
+def conversations() -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "cd .laweditor/chats 2>/dev/null && for f in $(ls -t *.txt 2>/dev/null); do printf '%s\t%s\n' \"${f%.txt}\" \"$(head -n 1 \"$f\")\"; done"], 5000)
+    return ok_text(files_list.out(r))
+
+# GET /api/output/<id>/<n>: what the n-th action of the turn answered (its first lines).
+def output(+target: String) -> IO(String):
+  do IO<String>:
+    text : String <- read_file(Ask.turn_file(nth(String.split(target, '/'), 0n)))
+    return ok_text(Ask.output(text, Ask.to_u32(nth(String.split(target, '/'), 1n))))
 
 # ---------- The chat that asks (Ask before changes: POLICY.bend, GATE.bend) ----------
 # Before an action that isn't on its list, Claude asks LawEditor's interphone (POST /mcp/<conversation>/<turn>)
@@ -554,12 +616,26 @@ def route_get.models(is_models: Bool, +path: String, dist: String, agent_md: Str
     case False{}:
       route_get.connect(String.starts_with(path, "/api/connect/"), path, dist, agent_md)
 
+def route_get.output(is_output: Bool, +path: String, dist: String, agent_md: String) -> IO(String):
+  match is_output:
+    case True{}:
+      output(after(path, "/api/output/"))
+    case False{}:
+      route_get.models(String.starts_with(path, "/api/models/"), path, dist, agent_md)
+
+def route_get.work(is_work: Bool, +path: String, dist: String, agent_md: String) -> IO(String):
+  match is_work:
+    case True{}:
+      work(after(path, "/api/work/"))
+    case False{}:
+      route_get.output(String.starts_with(path, "/api/output/"), path, dist, agent_md)
+
 def route_get.progress(is_progress: Bool, +path: String, dist: String, agent_md: String) -> IO(String):
   match is_progress:
     case True{}:
       progress(after(path, "/api/progress/"))
     case False{}:
-      route_get.models(String.starts_with(path, "/api/models/"), path, dist, agent_md)
+      route_get.work(String.starts_with(path, "/api/work/"), path, dist, agent_md)
 
 # Debug (a screen to remove later): GET /api/debug/LAWS.bend and /api/debug/check.
 def route_get.debug_laws(is_laws: Bool, +path: String, dist: String, +agent_md: String) -> IO(String):
@@ -598,8 +674,19 @@ def route_get.allowed(is_a: Bool, +path: String, dist: String, +agent_md: String
     case False{}:
       route_get.question(String.starts_with(path, "/api/question/"), path, dist, agent_md)
 
+def route_get.around(+path: String, dist: String, +agent_md: String, files: Bool, list: Bool, one: Bool) -> IO(String):
+  match files list one:
+    case True{} _ _:
+      files_list()
+    case False{} True{} _:
+      conversations()
+    case False{} False{} True{}:
+      conversation_get(after(path, "/api/conversation/"))
+    case False{} False{} False{}:
+      route_get.allowed(String.starts_with(path, "/api/allowed/"), path, dist, agent_md)
+
 def route_get(+path: String, dist: String, +agent_md: String) -> IO(String):
-  route_get.allowed(String.starts_with(path, "/api/allowed/"), path, dist, agent_md)
+  route_get.around(path, dist, agent_md, String.eq(path, "/api/files"), String.eq(path, "/api/conversations"), String.starts_with(path, "/api/conversation/"))
 
 # POST: /api/generate/<ai> (body: the sentence), /api/chat/<ai>/<model> (body: the conversation),
 # /api/file/<name> (body: the file).
@@ -665,8 +752,24 @@ def route_post.allowed(is_a: Bool, +path: String, +body: String, agent_md: Strin
     case False{}:
       route_post.answer(String.starts_with(path, "/api/answer/"), path, body, agent_md)
 
+def route_post.stop(is_stop: Bool, +path: String, +body: String, agent_md: String) -> IO(String):
+  match is_stop:
+    case True{}:
+      stop(after(path, "/api/stop/"))
+    case False{}:
+      route_post.allowed(String.starts_with(path, "/api/allowed/"), path, body, agent_md)
+
+def route_post.around(+path: String, +body: String, agent_md: String, folder: Bool, save: Bool) -> IO(String):
+  match folder save:
+    case True{} _:
+      open_folder()
+    case False{} True{}:
+      conversation_save(after(path, "/api/conversation/"), body)
+    case False{} False{}:
+      route_post.stop(String.starts_with(path, "/api/stop/"), path, body, agent_md)
+
 def route_post(+path: String, +body: String, agent_md: String) -> IO(String):
-  route_post.allowed(String.starts_with(path, "/api/allowed/"), path, body, agent_md)
+  route_post.around(path, body, agent_md, String.eq(path, "/api/open-folder"), String.starts_with(path, "/api/conversation/"))
 
 def route.at(is_post: Bool, +req: String, dist: String, agent_md: String) -> IO(String):
   match is_post:

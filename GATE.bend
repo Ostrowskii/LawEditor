@@ -146,9 +146,10 @@ def question_file(+turn: String) -> String:
 def answer_file(+turn: String) -> String:
   "/tmp/laweditor-ask-" ++ Ask.safe_id(turn) ++ ".answer"
 
-# What the page shows: the question on the first line, then what would change (a command may hold new lines).
+# What the page shows: the question on the first line; on the second, how to draw what would change (its
+# language and name, split by a tab); then what would change (a command may hold new lines).
 def question(+msg: String) -> String:
-  Ask.question(tool(msg), what(msg)) ++ "\n" ++ Ask.preview(tool(msg), msg)
+  Ask.question(tool(msg), what(msg)) ++ "\n" ++ Ask.preview_lang(tool(msg), msg) ++ Ask.tab() ++ Ask.preview_name(tool(msg), msg) ++ "\n" ++ Ask.preview(tool(msg), msg)
 
 # ---------- The gate decides ----------
 # Any agent that wants to act knocks here with the whole action: its tool, and the file or command.
