@@ -18,6 +18,18 @@ The engine's rules are in Bend (`harness/EVENTS.bend`, `engine/TURN.bend`), but 
 
 Not built. The artifact drew three options: chats side by side, led by you (built: the list with states); a main chat that leads helpers and reads their summaries (B); the chat proposes a sibling conversation with a card, and you decide (C). C fits the app (the chat proposes, the person decides) and needs only a new kind of question in `engine/TURN.bend` and a line the chat writes, like `GAME:`. B needs the questions of a helper to reach the person saying who asks: the hardest part to make trustworthy.
 
+## The chat's composition
+
+Not decided. The pieces of the chat (plan, action, working line, question, files changed) were each approved alone; together they stack without relating. A real conversation was driven and measured on 2026-11-18, and the artifact "LawEditor Chat Composition" (https://claude.ai/artifact/G3nS9UssNQ9ssxRHg24SdD) shows today beside three adjustments: A, one ruler (a turn is rows of two columns, a mark and the text); B, a thread through the turn's marks; C, the ruler plus the question in the message box's place and a finished turn folding its work. Recommended: A first, then what C adds. Each needs a new piece in Bend-UI (additions only), shown in the lib's docs page first.
+
+## Found while driving a real conversation (2026-11-18), still open
+
+- **A refused edit counts as a file changed.** The person says Don't allow, and the reply still shows the Edit action, "1 file changed" and "Done". `ASK.bend` reads the tools the chat asked for, not whether each one ran.
+- **The file's name in Files changed is the browser's own gray button.** `messages.js` puts `.link` on a `<button>`; Bend-UI's `.link` only resets a button with `.link--icon`.
+- **The Laws view reads `GDD.md` with `EDITOR.bend` in the browser**, the way the chat read its conversation: a Bend function that walks a long text runs out of room there. Not tested on a long document.
+- **A game with no `GAME:` line takes the start of the first message as its name** (a folder named `create-the-file-game-hello-txt-with-the`).
+- Narrower than about 420 px, the three buttons of a permission question don't wrap.
+
 ## Known limits
 
 - Two conversations in the same project can change the same file. The references solve it with a copy of the folder per conversation (needs git). A simple first rule: warn when a second turn starts in a project where one is running.
