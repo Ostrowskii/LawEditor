@@ -1,3 +1,32 @@
+# Next: after the engine (0.1.11)
+
+Written on 2026-11-17, with the branch `harness-engine`. What is still to decide or build.
+
+## Laws to propose (none is in `LAWS.bend`: they need the owner's yes)
+
+The engine's rules are in Bend (`harness/EVENTS.bend`, `engine/TURN.bend`), but no law says them yet:
+
+- **One question at a time in a conversation.** While a question waits, nothing else is asked and the person can't write (`EVENTS.can_say`).
+- **A message is refused while the chat answers.** `say` answers "busy"; nothing is queued silently.
+- **A conversation's events are only added to.** No event is changed or taken out; a window that has read n reads the ones after n.
+- **A conversation stays in one project.** Its game is named once; the folder's name changes, the conversation doesn't move.
+- **A draft becomes a game only with a sentence or a file.** Talking alone makes no game.
+- **A command of the person's follows the mode.** Only read runs none.
+- The two from 2026-11-12 (below) are still waiting too.
+
+## A main chat that opens others
+
+Not built. The artifact drew three options: chats side by side, led by you (built: the list with states); a main chat that leads helpers and reads their summaries (B); the chat proposes a sibling conversation with a card, and you decide (C). C fits the app (the chat proposes, the person decides) and needs only a new kind of question in `engine/TURN.bend` and a line the chat writes, like `GAME:`. B needs the questions of a helper to reach the person saying who asks: the hardest part to make trustworthy.
+
+## Known limits
+
+- Two conversations in the same project can change the same file. The references solve it with a copy of the folder per conversation (needs git). A simple first rule: warn when a second turn starts in a project where one is running.
+- The terminal pane draws lines and colors (`TERM=dumb`), not a full screen. Its helper is `python3`; a pseudo-terminal in Bend itself would remove it.
+- Open a folder… uses macOS's folder chooser. Elsewhere, `laweditor here`.
+- A deleted conversation goes to `.laweditor/trash`; the app has no way to bring it back.
+- The server's guard (Origin, Host) is tested by hand, not proved.
+- Bend-UI's panes (1.1.20) and the three small additions (1.1.21) are on the lib's branch `harness-panes`, not released: `package.json` still names `#main`.
+
 # Next: the chat asks Bend before it acts (0.1.8)
 
 Decided on 2026-11-12 with the repo owner. Built in 0.1.8 (2026-11-16); the laws below are still to add. The flows are in `PERMIT.bend`; `bend DIAGRAMS.bend` draws them.

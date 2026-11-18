@@ -15,7 +15,7 @@ export function createList(box, { current, onOpen, onMoved, onGone }) {
       row.className = "side__row";
       const name = title || "New conversation";
       row.innerHTML = `<button class="btn btn--plain btn--neutral" type="button"${id === current() ? ' aria-current="page"' : ""}>`
-        + (DOT[state] ? `<span class="${DOT[state]}" role="img" aria-label="${SAYS[state]}"></span>` : "")
+        + (DOT[state] ? `<span class="${DOT[state]}" role="img" aria-label="${SAYS[state]}"></span>` : '<span class="dot" aria-hidden="true"></span>')   // an empty dot: nothing going on; every title starts at the same place
         + `<span class="side__text">${esc(name)}</span>${game ? `<span class="tag">${esc(game)}</span>` : ""}</button>`
         + `<div class="dropdown side__more"><button class="btn btn--plain btn--neutral btn--icon btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ${esc(name)}">${icon("ellipsis")}</button>`
         + `<div class="menu menu--end" role="menu" hidden>${game ? menuItem("Rename the game", { data: 'data-act="rename"', lead: "pencil" }) : ""}`

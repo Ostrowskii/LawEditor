@@ -12,6 +12,28 @@ What the person asked for, as goals. Each one becomes an iteration when it's pic
 - Codex asks before changes too.
 - Codex's answer comes without its own notice ("Reading additional input from stdin...").
 - When a project is done, the chat shows a link that opens its folder on the computer.
+- A main chat that opens other chats (NEXT.md: options B and C).
+
+## 0.1.11 (2026-11-17, work in progress: not validated by the owner yet)
+
+On the branch `harness-engine`, with Bend-UI's branch `harness-panes` (1.1.21, not released). From the options approved in the "LawEditor Harness Options" artifact.
+
+- **One engine, and windows on it.** The conversation lives in the server: `engine/TURN.bend` conducts a turn (the AI, each law it heard, the mode it offers, the gate's questions, the laws written) and keeps every step as an event (`harness/EVENTS.bend`). The page only sends what you wrote or answered and draws the events. Before, the page kept the conversation and conducted the turn, so nothing else could use the app.
+- **No current project.** `projects/.current` is gone: every request names its project and its conversation. Any number of conversations and windows go at once. This also ends a leak seen in 0.1.10: a new conversation inherited another game's sentences, because the Laws page kept the document in memory and wrote it into whatever project was "current".
+- **Your projects live in `~/LawEditor`**, out of LawEditor's own folder (`LAWEDITOR_HOME`, `LAWEDITOR_PORT`). The first start copies the ones 0.1.10 kept in `projects/`; conversations kept as `Person:` / `Agent:` lines open as before. A game's folder takes the game's name when the game is born (`fox-run`, not the conversation's id).
+- **Any folder of the computer can be a project**, where it is (Open a folder… under the message box, with the computer's own folder chooser on macOS; `laweditor here` in a terminal).
+- **The side bar lists every conversation with its state**: a dot while the chat works, another while it waits for you, and the game's name. Its menu renames the game, opens its folder, or deletes the conversation (to the project's `.laweditor/trash`). You can start another conversation while one works.
+- **The place button under the message box** says New project and nothing has to be picked; its menu puts a new conversation in a game that exists or in a folder of the computer.
+- **LawEditor in the terminal**: `laweditor` (`cli.bend`, `bun run cli`) is a second window on the same engine. A question is answered with its letter; `/new`, `/list`, `/open <n>`, `/mode`, `/quit`.
+- **A command of your own**: a message that starts with `!` runs in the project's folder, and the chat reads what it printed. A mode that only reads runs none.
+- **The project's files, in a pane beside the chat** (Bend-UI's panes: tree, pane): what the chat changed is marked, a file opens there read only, and a file's name in a reply's "files changed" opens it.
+- **A real terminal in the app**, in a pane under the chat: your own shell, in the project's folder. A few lines of `python3` hold the pseudo-terminal, since Bend runs a program and waits for it to end. The chat neither sees it nor types in it.
+- **Compact view**: the chat and the terminal, with a line of state on top (the game, how many conversations work, how many wait for you).
+- **The server only answers its own windows**: a request another site's page sends, or one not addressed to the server by its own name, is refused. It runs commands, so this matters.
+- **The house in order**: `engine/` (what runs), `harness/` (the rules the chat follows and what the AIs are told), `flows/` (the drawings). `LAWS.bend` only changed its import paths.
+- **Legacy gone**: Bend-UI's current names (`btn--plain`, `btn--filled`, `detail`); what is only read has no hover (the laws list, the law beside a sentence); the faces in the chat only look; the key-chosen item of the `/` and `@` list shows; Files and Context in Laws show when they are on; code in replies is colored; the page's own side bar toggle, `title_of` and `is_start` are gone.
+- **Tested**: with a stand-in AI, in a browser driven by script: a law asked, added, written and checked; a game born and named; the mode offered and switched; three conversations at once in different states; stop; an old conversation opened whole; the Laws page showing only its own project; the files pane; a command in each mode; the real shell (typed, closed, opened again, ended); the compact view. With Claude itself: one turn in Ask before changes, where the gate asked twice and the file was written. Other sites' requests answered 403.
+- **Not yet**: no law covers the engine (NEXT.md lists the ones to propose). Two conversations in the same project can change the same file. The terminal draws lines and colors, not a full screen (no editor like vim), and needs `python3`. The folder chooser is macOS only (elsewhere: `laweditor here`). A deleted conversation has no way back in the app (its files are in `.laweditor/trash`). Codex still can't ask.
 
 ## 0.1.9 (2026-11-17)
 
