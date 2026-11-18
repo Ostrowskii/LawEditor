@@ -5,7 +5,7 @@
 import { initPane, setPane, tree, initTree } from "bend-ui/panes";
 import { codeBlock } from "bend-ui/syntax";
 import A from "../harness/ASK.bend";
-import { project, get, post, esc, icon } from "./where.js";
+import { project, get, post, icon, cover } from "./where.js";
 
 const pane = document.getElementById("files"), body = document.getElementById("files-body"), title = document.getElementById("files-title");
 const LINES = 2000;   // a longer file shows its first lines
@@ -44,9 +44,7 @@ async function show(path) {
   body.scrollTop = 0;
 }
 
-// The corners' words step aside while the pane takes their room.
-const foots = document.querySelectorAll(".window__foot");
-initPane(pane, { label: "Files", onToggle(on) { isOpen = on; foots.forEach((f) => f.hidden = on); if (on) load(); } });
+initPane(pane, { label: "Files", onToggle(on) { isOpen = on; cover("files", on); if (on) load(); } });
 
 // A file's name in a reply: the pane opens on it.
 document.addEventListener("laweditor:file", async (e) => {
@@ -60,5 +58,6 @@ document.addEventListener("laweditor:changes", (e) => {
   for (const [file, add, del] of e.detail) changed.set(file, { add, del });
   if (isOpen && !shown) load();
 });
-// Another conversation: its project's files, and nothing marked yet.
-document.addEventListener("laweditor:where", () => { changed = new Map(); open = []; shown = ""; if (isOpen) load(); });
+// Another conversation: its project's files, and nothing marked yet. (The same one, its folder named:
+// only the list is read again.)
+document.addEventListener("laweditor:where", (e) => { if (!e.detail) { changed = new Map(); open = []; shown = ""; } if (isOpen) load(); });

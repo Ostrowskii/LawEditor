@@ -62,6 +62,7 @@ export function createList(box, { current, onOpen, onMoved, onGone }) {
     if (editing) return;
     let got = ""; try { got = await get("/api/conversations"); } catch { return; }
     const rows = got.split("\n").filter(Boolean).map((l) => l.split("\t"));
+    document.dispatchEvent(new CustomEvent("laweditor:list", { detail: rows }));   // the compact view counts them
     const mine = rows.find((r) => r[2] === current());
     if (mine) onMoved(mine[0], mine[1]);   // its project got its folder and name (the game was born)
     if (!force && got === text) return;

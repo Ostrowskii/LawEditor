@@ -11,6 +11,8 @@
 <script type="module" src="./chat.js"></script>
 <script type="module" src="./debug.js"></script>
 <script type="module" src="./files.js"></script>
+<script type="module" src="./shell.js"></script>
+<script type="module" src="./compact.js"></script>
 </head>
 <body class="desk">
 <div class="window" id="win" data-agent="lg">
@@ -32,6 +34,12 @@
   </aside>
 
   <div class="window__main">
+    <div class="strip" id="strip" role="status" hidden>
+      <span class="strip__item" id="strip-place"></span>
+      <button class="btn btn--plain btn--neutral btn--sm" type="button" id="strip-working" hidden></button>
+      <button class="btn btn--plain btn--neutral btn--sm" type="button" id="strip-asking" hidden></button>
+      <button class="btn btn--plain btn--neutral btn--sm strip__end" type="button" id="strip-full"><svg class="icon icon--sm"><use href="#i-panel-left"/></svg><span>Full app</span></button>
+    </div>
     <div class="toolbar">
       <button class="btn btn--plain btn--neutral btn--icon only-narrow" data-side-toggle="side" aria-label="Side bar"><svg class="icon"><use href="#i-panel-left"/></svg></button>
       <div class="dropdown doc-only" id="kind" hidden>
@@ -58,6 +66,7 @@
       <button class="btn btn--filled doc-only" id="gen" hidden><svg class="icon"><use href="#i-wand-sparkles"/></svg><span class="hide-narrow" id="gen-label">Generate LAWs</span></button>
       <button class="btn btn--plain btn--neutral btn--icon doc-only" id="files-btn" data-view="files" aria-label="Files" title="Files" hidden><svg class="icon"><use href="#i-code"/></svg></button>
       <button class="btn btn--plain btn--neutral btn--icon doc-only" id="context-btn" data-view="context" aria-label="Context" title="Context" hidden><svg class="icon"><use href="#i-book-open"/></svg></button>
+      <button class="btn btn--plain btn--neutral btn--icon hide-narrow" type="button" id="compact" aria-label="Compact view"><svg class="icon"><use href="#i-minimize-2"/></svg></button>
       <button class="btn btn--plain btn--neutral btn--icon" type="button" data-pane-toggle="shell" aria-label="Terminal"><svg class="icon"><use href="#i-terminal"/></svg></button>
       <button class="btn btn--plain btn--neutral btn--icon" type="button" data-pane-toggle="files" aria-label="Files"><svg class="icon"><use href="#i-panel-right"/></svg></button>
       <button class="btn btn--plain btn--neutral btn--icon hide-narrow" id="full" aria-label="Full screen" title="Full screen"><svg class="icon"><use href="#i-maximize"/></svg></button>

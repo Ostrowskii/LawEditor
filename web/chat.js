@@ -229,6 +229,8 @@ const list = createList($("history"), {
   onGone: () => newConversation(),
 });
 $("new-conversation").addEventListener("click", () => newConversation());
+// Another part of the page asks for a conversation (the compact view's line of state).
+document.addEventListener("laweditor:open", (e) => openConversation(e.detail.key, e.detail.conv));
 
 // ---------- Views ----------
 // Chat opens first. Its selector shows the conversation or its context (what the chat is told).

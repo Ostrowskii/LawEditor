@@ -184,9 +184,10 @@ def migrate.go(ps: List<&2, String>) -> IO(Unit):
         migrate.at(String.is_empty(h), h)
         migrate.go(t)
 
-# Nothing was running before the server started: every conversation is idle, and no law is being written.
+# Nothing was running before the server started: every conversation is idle, no law is being written, and
+# a terminal left from before is ended.
 # A conversation kept by 0.1.10 (a .txt of "Person:" and "Agent:" lines) gets its events; the .txt stays.
 def start() -> IO(Unit):
   do IO<Unit>:
-    old : String <- Sys.sh(projects_sh() ++ "projects | while IFS=\"$t\" read -r k d; do rmdir \"$d/.laweditor/lawlock\" 2>/dev/null; for f in \"$d\"/.laweditor/chats/*.state; do [ -e \"$f\" ] && printf idle > \"$f\"; done; for f in \"$d\"/.laweditor/chats/*.txt; do [ -e \"$f\" ] && [ ! -e \"${f%.txt}.log\" ] && printf '%s\\n' \"${f%.txt}\"; done; done", [], 10000)
+    old : String <- Sys.sh(projects_sh() ++ "projects | while IFS=\"$t\" read -r k d; do rmdir \"$d/.laweditor/lawlock\" 2>/dev/null; p=$(cat \"$d/.laweditor/term.pid\" 2>/dev/null); [ -n \"$p\" ] && { pkill -P \"$p\" 2>/dev/null; kill \"$p\" 2>/dev/null; }; rm -f \"$d/.laweditor/term.pid\" \"$d/.laweditor/term.in\"; for f in \"$d\"/.laweditor/chats/*.state; do [ -e \"$f\" ] && printf idle > \"$f\"; done; for f in \"$d\"/.laweditor/chats/*.txt; do [ -e \"$f\" ] && [ ! -e \"${f%.txt}.log\" ] && printf '%s\\n' \"${f%.txt}\"; done; done", [], 10000)
     migrate.go(String.lines(old))

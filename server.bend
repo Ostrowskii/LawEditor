@@ -15,6 +15,7 @@ import ./engine/SYS.bend as Sys
 import ./engine/PROJECTS.bend as Proj
 import ./engine/TURN.bend as Turn
 import ./engine/LAW.bend as Law
+import ./engine/TERMINAL.bend as Term
 import ./harness/MODELS.bend as Models
 import ./harness/GATE.bend as Gate
 import ./harness/EVENTS.bend as Ev
@@ -208,6 +209,10 @@ def debug_check(+cx: Sys.Ctx) -> IO(String):
     r : U32 & String <- Sys.run("bend", [Sys.root(cx) ++ "/PROOF.bend"], 120000)
     return ok_text(Sys.printed(r))
 
+# The first two pieces of a path.
+def is2(+p: List<&2, String>, a: String, b: String) -> Bool:
+  (String.eq(Sys.nth(p, 0n), a) && String.eq(Sys.nth(p, 1n), b))
+
 # ---------- A project: /api/p/<key>/… ----------
 
 # The files the Laws view may read and write in a project.
@@ -224,6 +229,7 @@ def project_get(+cx: Sys.Ctx, +dir: String, +rest: List<&2, String>) -> IO(Strin
   routes([
     (String.is_empty(dir), ok(IO.pure(String, ""))),
     (String.eq(Sys.nth(rest, 0n), "files"), ok(Proj.files(dir))),
+    (is2(rest, "term", "out"), ok(Term.out(dir, Sys.nth(rest, 2n)))),
     ((String.eq(Sys.nth(rest, 0n), "file") && is_project_file(Sys.nth(rest, 1n))), ok(Sys.read_file(dir ++ "/" ++ Sys.nth(rest, 1n))))
   ], missing())
 
@@ -233,6 +239,9 @@ def project_post(+cx: Sys.Ctx, +dir: String, +rest: List<&2, String>, +body: Str
     ((String.eq(Sys.nth(rest, 0n), "file") && is_project_file(Sys.nth(rest, 1n))), ok(saved(dir, Sys.nth(rest, 1n), body))),
     ((String.eq(Sys.nth(rest, 0n), "generate") && Turn.is_ai(Sys.nth(rest, 1n))), ok(Law.write(cx, dir, Sys.nth(rest, 1n), body))),
     (String.eq(Sys.nth(rest, 0n), "read"), ok(Proj.read(dir, String.trim(body)))),
+    (is2(rest, "term", "start"), ok(Term.start(dir))),
+    (is2(rest, "term", "in"), ok(Term.keys(dir, body))),
+    (is2(rest, "term", "stop"), ok(Term.stop(dir))),
     (String.eq(Sys.nth(rest, 0n), "rename"), ok(Proj.rename(dir, body))),
     (String.eq(Sys.nth(rest, 0n), "open"), ok(Proj.open(dir)))
   ], missing())
@@ -320,9 +329,6 @@ def mcp(+key: String, +conv: String, +turn: String, +msg: String) -> IO(String):
 
 # ---------- Routes ----------
 # p: the path's pieces ("/api/c/rio-negro/abc/say" is api, c, rio-negro, abc, say).
-
-def is2(+p: List<&2, String>, a: String, b: String) -> Bool:
-  (String.eq(Sys.nth(p, 0n), a) && String.eq(Sys.nth(p, 1n), b))
 
 def route_get(+cx: Sys.Ctx, +p: List<&2, String>, +path: String) -> IO(String):
   routes([
