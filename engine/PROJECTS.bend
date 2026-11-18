@@ -135,7 +135,8 @@ def choose() -> IO(String):
 def files(+dir: String) -> IO(String):
   Sys.sh("cd \"$0\" && find . -type f -not -path '*/.*' -not -path '*/node_modules/*' | sed 's|^\\./||' | sort | head -500", [dir], 10000)
 
-# GET /api/p/<key>/read/<path>: one of its files, as text. A path may not climb out of the project.
+# POST /api/p/<key>/read, body: a path. One of the project's files, as text (the path comes in the body, so
+# any name reaches the server as it is). A path may not climb out of the project.
 def read.at(bad: Bool, +dir: String, +path: String) -> IO(String):
   match bad:
     case True{}:

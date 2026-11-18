@@ -196,8 +196,7 @@ def project_get(+cx: Sys.Ctx, +dir: String, +rest: List<&2, String>) -> IO(Strin
   routes([
     (String.is_empty(dir), ok(IO.pure(String, ""))),
     (String.eq(Sys.nth(rest, 0n), "files"), ok(Proj.files(dir))),
-    ((String.eq(Sys.nth(rest, 0n), "file") && is_project_file(Sys.nth(rest, 1n))), ok(Sys.read_file(dir ++ "/" ++ Sys.nth(rest, 1n)))),
-    (String.eq(Sys.nth(rest, 0n), "read"), ok(Proj.read(dir, String.join(Ev.after.drop(rest, 1n), "/"))))
+    ((String.eq(Sys.nth(rest, 0n), "file") && is_project_file(Sys.nth(rest, 1n))), ok(Sys.read_file(dir ++ "/" ++ Sys.nth(rest, 1n))))
   ], missing())
 
 def project_post(+cx: Sys.Ctx, +dir: String, +rest: List<&2, String>, +body: String) -> IO(String):
@@ -205,6 +204,7 @@ def project_post(+cx: Sys.Ctx, +dir: String, +rest: List<&2, String>, +body: Str
     (String.is_empty(dir), missing()),
     ((String.eq(Sys.nth(rest, 0n), "file") && is_project_file(Sys.nth(rest, 1n))), ok(saved(dir, Sys.nth(rest, 1n), body))),
     ((String.eq(Sys.nth(rest, 0n), "generate") && Turn.is_ai(Sys.nth(rest, 1n))), ok(Law.write(cx, dir, Sys.nth(rest, 1n), body))),
+    (String.eq(Sys.nth(rest, 0n), "read"), ok(Proj.read(dir, String.trim(body)))),
     (String.eq(Sys.nth(rest, 0n), "rename"), ok(Proj.rename(dir, body))),
     (String.eq(Sys.nth(rest, 0n), "open"), ok(Proj.open(dir)))
   ], missing())

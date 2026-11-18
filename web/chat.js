@@ -27,7 +27,8 @@ const page = document.querySelector(".page");
 const messages = createMessages($("chat"), page, {
   output: (turn, n) => conversation(`output/${turn}/${n}`),
   openFolder: () => post(project("open")),
-  openFile: (path, marks) => document.dispatchEvent(new CustomEvent("laweditor:file", { detail: { path, marks } })),
+  openFile: (path) => document.dispatchEvent(new CustomEvent("laweditor:file", { detail: path })),
+  changed: (files) => document.dispatchEvent(new CustomEvent("laweditor:changes", { detail: files })),
 });
 const face = createFace();
 const [aiDd, modelDd] = document.querySelectorAll("#composer .composer__bar .dropdown:not(#place):not(#mode)");

@@ -1,7 +1,8 @@
 // Chat messages: draws them. While the agent works, its reply shows what ASK.bend reads from the turn
 // (the server's work/<turn>): its actions (.tools), its plan (.plan), what it does now (.working) and, at
 // the end, the files it changed (.changes).
-// at: where the open conversation's things are asked for: at.output(turn, n), at.openFolder(), at.openFile(path).
+// at: the open conversation's things: at.output(turn, n) (where an action's output is asked for),
+// at.openFolder(), at.openFile(path) and at.changed(files) (a reply changed these files).
 import { busy, done as doneBtn } from "bend-ui";
 import { markdown } from "../markdown.js";
 import { codeBlock, highlight } from "bend-ui/syntax";
@@ -80,13 +81,14 @@ export function createMessages(list, page, at) {
     function finish() {
       clearInterval(tick); working.remove();
       if (!changes.length) return;
+      at.changed(changes.map(([, file, add, del]) => [file, Number(add), Number(del)]));
       const c = document.createElement("div"); c.className = "changes";
       c.innerHTML = '<div class="changes__head"><span></span></div>';
       c.querySelector(".changes__head span").textContent = head;
       for (const [, file, add, del] of changes) {
         const r = document.createElement("div"); r.className = "changes__row";
         r.innerHTML = '<button class="link changes__file mono" type="button"></button><span class="changes__add"></span><span class="changes__del"></span>';
-        r.children[0].textContent = file; r.children[0].addEventListener("click", () => at.openFile(file, { add, del })); r.children[1].textContent = Number(add) ? "+" + add : ""; r.children[2].textContent = Number(del) ? "−" + del : "";
+        r.children[0].textContent = file; r.children[0].addEventListener("click", () => at.openFile(file)); r.children[1].textContent = Number(add) ? "+" + add : ""; r.children[2].textContent = Number(del) ? "−" + del : "";
         c.append(r);
       }
       body.append(c);
@@ -195,8 +197,9 @@ export function createMessages(list, page, at) {
   function ran(command, code, output) {
     const m = document.createElement("div");
     m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text mono"></div><pre class="block__out"></pre></div></div>';
+    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__slot"><span class="dot"></span></div><div class="block__text mono"></div><pre class="block__out"></pre></div></div>';
     m.querySelector(".block__text").textContent = command;
+    m.querySelector(".dot").className = code === "0" ? "dot dot--success" : "dot dot--danger";   // how it ended
     const out = m.querySelector(".block__out");
     out.textContent = output || "(no output)"; out.classList.toggle("block__out--error", code !== "0");
     list.append(m); down();

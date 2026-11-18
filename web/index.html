@@ -10,6 +10,7 @@
 <script type="module" src="./main.js"></script>
 <script type="module" src="./chat.js"></script>
 <script type="module" src="./debug.js"></script>
+<script type="module" src="./files.js"></script>
 </head>
 <body class="desk">
 <div class="window" id="win" data-agent="lg">
@@ -57,9 +58,13 @@
       <button class="btn btn--filled doc-only" id="gen" hidden><svg class="icon"><use href="#i-wand-sparkles"/></svg><span class="hide-narrow" id="gen-label">Generate LAWs</span></button>
       <button class="btn btn--plain btn--neutral btn--icon doc-only" id="files-btn" data-view="files" aria-label="Files" title="Files" hidden><svg class="icon"><use href="#i-code"/></svg></button>
       <button class="btn btn--plain btn--neutral btn--icon doc-only" id="context-btn" data-view="context" aria-label="Context" title="Context" hidden><svg class="icon"><use href="#i-book-open"/></svg></button>
+      <button class="btn btn--plain btn--neutral btn--icon" type="button" data-pane-toggle="shell" aria-label="Terminal"><svg class="icon"><use href="#i-terminal"/></svg></button>
+      <button class="btn btn--plain btn--neutral btn--icon" type="button" data-pane-toggle="files" aria-label="Files"><svg class="icon"><use href="#i-panel-right"/></svg></button>
       <button class="btn btn--plain btn--neutral btn--icon hide-narrow" id="full" aria-label="Full screen" title="Full screen"><svg class="icon"><use href="#i-maximize"/></svg></button>
     </div>
 
+    <div class="window__body">
+    <div class="window__col">
     <main class="page">
       <section class="view" id="view-doc" hidden>
         <div class="doc" id="doc">
@@ -167,6 +172,22 @@
         <div class="meter" id="context" hidden title="How much of the AI's context this conversation uses"><span class="meter__label">Context</span><span class="meter__bar"><span></span></span><span class="meter__value"></span></div>
       </div>
     </form>
+    <section class="pane pane--under" id="shell" aria-labelledby="shell-title" hidden>
+      <header class="pane__head">
+        <h2 class="pane__title" id="shell-title">Terminal</h2>
+        <div class="pane__actions"><button class="btn btn--plain btn--neutral btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close the terminal"><svg class="icon"><use href="#i-x"/></svg></button></div>
+      </header>
+      <div class="term" id="term"></div>
+    </section>
+    </div>
+    <aside class="pane" id="files" aria-labelledby="files-title" hidden>
+      <header class="pane__head">
+        <h2 class="pane__title" id="files-title">Files</h2>
+        <div class="pane__actions"><button class="btn btn--plain btn--neutral btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close files"><svg class="icon"><use href="#i-x"/></svg></button></div>
+      </header>
+      <div class="pane__body" id="files-body"></div>
+    </aside>
+    </div>
 
     <p class="detail window__foot">Made with <a class="link" href="https://github.com/isabellaherman/Bend-UI" target="_blank" rel="noopener">Bend-UI</a></p>
     <p class="detail window__foot window__foot--end"><span class="tag tag--mono" id="version"></span></p>
