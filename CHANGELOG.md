@@ -14,9 +14,9 @@ What the person asked for, as goals. Each one becomes an iteration when it's pic
 - When a project is done, the chat shows a link that opens its folder on the computer.
 - A main chat that opens other chats (NEXT.md: options B and C).
 
-## 0.1.11 (2026-11-17, work in progress: not validated by the owner yet)
+## 0.1.11 (2026-11-18)
 
-On the branch `harness-engine`, with Bend-UI's branch `harness-panes` (1.1.21, not released). From the options approved in the "LawEditor Harness Options" artifact.
+On Bend-UI 1.1.22. From the options approved in the "LawEditor Harness Options" artifact and the adjustments of the "LawEditor Chat Composition" artifact. The owner ran it and approved it on 2026-11-18.
 
 - **The chat's composition** (2026-11-18, from the "LawEditor Chat Composition" artifact, adjustments A and C, on Bend-UI 1.1.22). The chat's pieces were each approved alone and stacked without relating: in a finished reply the text started at seven different places. Now a reply and what comes of it is one turn on one ruler (`.turn`: rows of two columns, a mark and the text): the plan always first, each action a row that opens, what it does now, its words, one closing line with the files changed and the folder. A finished reply folds its work into one line. A question takes the message box's place (`.ask`) and the turn keeps one line of what was answered; the rules heard are a group under the reply. A stopped reply says so inside its turn. `web/chat/messages.js` draws turns; `web/chat/composer.js` holds the question.
 - **A refused action no longer counts.** `ASK.bend` reads which actions did not run (Claude marks their answer `is_error`): such an action says "not run" and its file is not in "files changed". Before, refusing an edit still showed "Done. 1 file changed".

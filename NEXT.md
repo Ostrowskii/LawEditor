@@ -1,6 +1,6 @@
 # Next: after the engine (0.1.11)
 
-Written on 2026-11-17, with the branch `harness-engine`. What is still to decide or build.
+Written on 2026-11-17 and 2026-11-18, with 0.1.11. What is still to decide or build.
 
 ## Laws to propose (none is in `LAWS.bend`: they need the owner's yes)
 
@@ -44,7 +44,6 @@ The Laws view was tested with a document of 58,000 letters (702 sentences): it o
 - A deleted conversation goes to `.laweditor/trash`; the app has no way to bring it back.
 - A project's folder in the home keeps a simple name (letters, digits, "-"), as LawEditor names them; one renamed by hand with a space or a dot isn't listed. Open it with Open a folder… instead.
 - The server's guard (Origin, Host) is tested by hand, not proved.
-- Bend-UI's panes (1.1.20) and the three small additions (1.1.21) are on the lib's branch `harness-panes`, not released: `package.json` still names `#main`.
 
 # Next: the chat asks Bend before it acts (0.1.8)
 
