@@ -186,6 +186,32 @@ def migrate.go(ps: List<&2, String>) -> IO(Unit):
         migrate.at(String.is_empty(h), h)
         migrate.go(t)
 
+# What the server left open when it stopped is closed (EVENTS.bend, left): nobody waits for it anymore.
+def close.one(none: Bool, +path: String, events: String) -> IO(Unit):
+  match none:
+    case True{}:
+      IO.pure(Unit, Unit{})
+    case False{}:
+      Sys.append_file(path, events)
+
+def close.at(none: Bool, +path: String) -> IO(Unit):
+  match none:
+    case True{}:
+      IO.pure(Unit, Unit{})
+    case False{}:
+      do IO<Unit>:
+        +log : String <- Sys.read_file(path)
+        close.one(String.is_empty(Ev.left(log)), path, Ev.left(log))
+
+def close.go(ps: List<&2, String>) -> IO(Unit):
+  match ps:
+    case Nil{}:
+      IO.pure(Unit, Unit{})
+    case +h <> t:
+      do IO<Unit>:
+        close.at(String.is_empty(h), h)
+        close.go(t)
+
 # Nothing was running before the server started: every conversation is idle, no law is being written, and
 # a terminal left from before is ended.
 # A conversation kept by 0.1.10 (a .txt of "Person:" and "Agent:" lines) gets its events; the .txt stays.
@@ -193,3 +219,5 @@ def start() -> IO(Unit):
   do IO<Unit>:
     old : String <- Sys.sh(projects_sh() ++ "projects | while IFS=\"$t\" read -r k d; do rmdir \"$d/.laweditor/lawlock\" 2>/dev/null; p=$(cat \"$d/.laweditor/term.pid\" 2>/dev/null); [ -n \"$p\" ] && { pkill -P \"$p\" 2>/dev/null; kill \"$p\" 2>/dev/null; }; rm -f \"$d/.laweditor/term.pid\" \"$d/.laweditor/term.in\"; for f in \"$d\"/.laweditor/chats/*.state; do [ -e \"$f\" ] && printf idle > \"$f\"; done; for f in \"$d\"/.laweditor/chats/*.txt; do [ -e \"$f\" ] && [ ! -e \"${f%.txt}.log\" ] && printf '%s\\n' \"${f%.txt}\"; done; done", [], 10000)
     migrate.go(String.lines(old))
+    logs : String <- Sys.sh(projects_sh() ++ "projects | while IFS=\"$t\" read -r k d; do for f in \"$d\"/.laweditor/chats/*.log; do [ -e \"$f\" ] && printf '%s\\n' \"$f\"; done; done", [], 10000)
+    close.go(String.lines(logs))

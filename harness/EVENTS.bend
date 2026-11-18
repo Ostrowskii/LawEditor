@@ -306,6 +306,48 @@ def asking.at(+q: String, none: Bool, answered: Bool) -> String:
 def asking(+log: String) -> String:
   asking.at(field(last(log, "ask"), 0n), String.is_empty(last(log, "ask")), answered.go(lines(log), field(last(log, "ask"), 0n)))
 
+# ---------- What a server that stopped left behind ----------
+# The engine that waited for an answer, or ran a turn, is gone with the server. When the server starts,
+# each conversation gets the events that close what was open: a question nobody waits for anymore is
+# answered no, and a turn that was running failed. Without them the conversation would wait forever.
+
+def no_word.at(heard: Bool, offer: Bool) -> String:
+  match heard offer:
+    case True{} _:
+      "dont"
+    case False{} True{}:
+      "stay"
+    case False{} False{}:
+      "deny"
+
+# The word that says no to a question, by its kind (HEAR.bend, OFFER.bend, GATE.bend).
+def no_word(+q: String) -> String:
+  no_word.at(String.starts_with(q, "law-"), String.starts_with(q, "mode-"))
+
+def left.one(open: Bool, +q: String, rest: String) -> String:
+  match open:
+    case True{}:
+      event("answer", [q, no_word(q)]) ++ event("note", [q, "none", "Not answered: LawEditor was closed while it waited."]) ++ rest
+    case False{}:
+      rest
+
+def left.go(xs: List<&2, String>, +log: String) -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case +h <> t:
+      left.one((is_a(h, "ask") && Bool.not(answered.go(lines(log), field(h, 0n)))), field(h, 0n), left.go(t, log))
+
+def left.turn(none: Bool, +turn: String) -> String:
+  match none:
+    case True{}:
+      ""
+    case False{}:
+      event("fail", [turn, "LawEditor was closed while the chat was answering."])
+
+def left(+log: String) -> String:
+  left.turn(String.is_empty(running(log)), running(log)) ++ left.go(lines(log), log)
+
 # May the person write now? Not while the chat answers, and not while a question waits (CHAT.bend: can_send).
 def can_say(+log: String) -> Bool:
   (String.is_empty(running(log)) && String.is_empty(asking(log)))
