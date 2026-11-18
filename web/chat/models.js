@@ -3,10 +3,10 @@
 // The list's states come from CHAT.bend.
 import C from "../../harness/CHAT.bend";
 
+import { esc, menuItem } from "../where.js";
+
 const AIS = [["claude", "Claude"], ["codex", "Codex"]];
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const item = ([id, name], on) =>
-  `<button class="menu__item" role="menuitemradio" aria-checked="${on}" data-id="${esc(id)}"><span>${esc(name)}</span><svg class="icon icon--sm menu__check"><use href="#i-check"/></svg></button>`;
+const item = ([id, name], on) => menuItem(name, { data: `data-id="${esc(id)}"`, checked: on });
 
 async function fetchModels(ai) {
   try {

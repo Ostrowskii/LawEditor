@@ -1,7 +1,7 @@
 {
   "name": "laweditor",
   "private": true,
-  "version": "0.1.9",
+  "version": "0.1.11",
   "type": "module",
   "dependencies": {
     "bend-ui": "github:isabellaherman/Bend-UI#main"
@@ -10,6 +10,6 @@
     "check": "bend PROOF.bend && bend server.bend --check-only",
     "build": "bend web/index.html -o dist",
     "server": "bend server.bend -o dist/laweditor-server",
-    "start": "bun run build && bun run server && mkdir -p projects && cd projects && ../dist/laweditor-server ../dist ../harness/AGENT.md"
+    "start": "bun run build && bun run server && ./start.sh"
   }
 }

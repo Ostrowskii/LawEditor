@@ -1,22 +1,21 @@
-// Chat messages: draws them. The agent's reply goes through CHAT.bend's phases: reading, writing, done.
-// While it works, the reply shows what ASK.bend reads from the turn (GET /api/work/<id>): its actions
-// (.tools), its plan (.plan), what it does now (.working) and, at the end, the files it changed (.changes).
-import C from "../../harness/CHAT.bend";
+// Chat messages: draws them. While the agent works, its reply shows what ASK.bend reads from the turn
+// (the server's work/<turn>): its actions (.tools), its plan (.plan), what it does now (.working) and, at
+// the end, the files it changed (.changes).
+// at: where the open conversation's things are asked for: at.output(turn, n), at.openFolder(), at.openFile(path).
 import { busy, done as doneBtn } from "bend-ui";
 import { markdown } from "../markdown.js";
-import { codeBlock } from "bend-ui/syntax";
+import { codeBlock, highlight } from "bend-ui/syntax";
+import { lessMotion, sleep, get } from "../where.js";
 
-const lessMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-export function createMessages(list, page) {
+export function createMessages(list, page, at) {
   const down = () => page.scrollTo({ top: page.scrollHeight, behavior: lessMotion.matches ? "auto" : "smooth" });
 
   // Yours: a bubble at the right that fades in.
   // files: what the person pointed to with @, as tags after the text.
-  function mine(text, files = []) {
+  // old: from a conversation opened again (it is just there, with no motion).
+  function mine(text, files = [], old = false) {
     const m = document.createElement("div");
-    m.className = "msg msg--me is-arriving";
+    m.className = old ? "msg msg--me" : "msg msg--me is-arriving";
     m.textContent = text;
     for (const f of files) { const t = document.createElement("span"); t.className = "tag tag--mono"; t.textContent = "@" + f; m.append(" ", t); }
     list.append(m); down();
@@ -31,7 +30,7 @@ export function createMessages(list, page) {
     list.append(m); down();
     const body = m.lastChild, working = body.querySelector(".working");
     const text = document.createElement("div");
-    let phase = C.reading(), streamed = false, tools = null, plan = null, changes = [], head = "";
+    let streamed = false, tools = null, plan = null, changes = [], head = "";
     const t0 = Date.now(), tick = setInterval(() => { working.querySelector(".working__time").textContent = Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
     const before = (el) => body.insertBefore(el, text.isConnected ? text : working);
     const say = (s) => { if (!text.isConnected) body.insertBefore(text, working); text.textContent = s; };
@@ -52,7 +51,7 @@ export function createMessages(list, page) {
           d.addEventListener("toggle", async () => {
             const out = d.querySelector(".tool__out");
             if (!d.open || !out || out.textContent) return;
-            let text = ""; try { text = await (await fetch(`/api/output/${turn}/${n}`)).text(); } catch {}
+            let text = ""; try { text = await get(at.output(turn, n)); } catch {}
             // An edit answers with what it changed: drawn as a diff code block, clipped when long.
             if (kind === "Edit" && text) { out.replaceWith(Object.assign(document.createElement("div"), { innerHTML: codeBlock(text, { lang: "diff", name: what, clip: true }) }).firstChild); return; }
             out.textContent = text || "(no output)";
@@ -86,8 +85,8 @@ export function createMessages(list, page) {
       c.querySelector(".changes__head span").textContent = head;
       for (const [, file, add, del] of changes) {
         const r = document.createElement("div"); r.className = "changes__row";
-        r.innerHTML = '<span class="changes__file mono"></span><span class="changes__add"></span><span class="changes__del"></span>';
-        r.children[0].textContent = file; r.children[1].textContent = Number(add) ? "+" + add : ""; r.children[2].textContent = Number(del) ? "−" + del : "";
+        r.innerHTML = '<button class="link changes__file mono" type="button"></button><span class="changes__add"></span><span class="changes__del"></span>';
+        r.children[0].textContent = file; r.children[0].addEventListener("click", () => at.openFile(file, { add, del })); r.children[1].textContent = Number(add) ? "+" + add : ""; r.children[2].textContent = Number(del) ? "−" + del : "";
         c.append(r);
       }
       body.append(c);
@@ -96,24 +95,24 @@ export function createMessages(list, page) {
       const card = document.createElement("div");
       card.innerHTML = '<div class="block block--done"><div class="block__slot"><span class="dot dot--success"></span></div><div class="block__text"></div></div><div class="actions actions--start"><button class="link link--icon" type="button"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-folder"/></svg><span>Open project folder</span></button></div>';
       card.querySelector(".block__text").textContent = "Done. " + head + ".";
-      card.querySelector(".link").addEventListener("click", () => fetch("/api/open-folder", { method: "POST" }));
+      card.querySelector(".link").addEventListener("click", () => at.openFolder());
       body.append(card);
     }
     // The answer, once whole: Markdown, drawn by Bend-UI's .prose.
-    const prose = (s) => { if (!text.isConnected) body.insertBefore(text, working); text.className = "prose"; text.innerHTML = markdown(s); };
+    const prose = (s) => { if (!text.isConnected) body.insertBefore(text, working); text.className = "prose"; text.innerHTML = markdown(s); text.querySelectorAll("pre").forEach((pre) => highlight(pre, pre.dataset.lang || undefined)); };
     return {
       el: m, slot: m.firstChild.firstChild, work,
       shown: () => skip + (tools ? tools.children.length : 0),
       // The answer while it is written (Claude streams it): shown as it comes, no word motion.
       live(s) {
-        streamed = true; phase = C.writing(); say(s);
+        streamed = true; say(s);
         working.querySelector(".working__verb").textContent = "Writing"; working.querySelector(".working__what").textContent = "";
         down();
       },
       // The answer arrives whole from the CLI; its words appear one after another, each fading in.
       async write(answer) {
         if (!streamed) {
-          phase = C.writing(); say("");
+          say("");
           for (const w of answer.split(/(\s+)/).filter(Boolean)) {
             const s = document.createElement("span");
             if (/\S/.test(w)) s.className = "msg__word";
@@ -121,23 +120,21 @@ export function createMessages(list, page) {
             if (/\S/.test(w) && !lessMotion.matches) { down(); await sleep(30); }
           }
         }
-        prose(answer); finish(); phase = C.done(); down();
+        prose(answer); finish(); down();
       },
       // From an old conversation, opened again: no motion, the answer and what it changed.
-      restore(answer) { prose(answer); finish(); phase = C.done(); },
+      restore(answer) { prose(answer); finish(); },
       // It stopped with an error: the working line goes; the error card comes from failed().
       stop() { clearInterval(tick); working.remove(); if (!text.isConnected && !tools && !plan) m.remove(); },
-      phase: () => phase,
     };
   }
 
-  // A rule the chat heard (HEAR.bend), under its reply: the sentence as a document block, and the person's answer.
-  // answers: [{ label, value, kind }], kind is a Bend-UI button ("btn--primary", "btn--ghost" or "").
-  // The same card asks before the chat acts (ASK.bend): then preview is what would change, and dot is "dot dot--warning".
+  // A question for the person, as a card: a rule the chat heard (HEAR.bend: the sentence as a document
+  // block), the mode it offers (OFFER.bend), or an action that needs a yes (GATE.bend).
   // preview is a note, or { code, lang, name }: a code block, clipped when long (an edit comes as a diff).
-  // Every card uses Bend-UI's polished buttons (Harness Lab): every button but the main one is bordered and
+  // The buttons are Bend-UI's polished ones (Harness Lab): every button but the main one is bordered and
   // "async": clicked, it turns while the answer goes, then shows its check.
-  function proposal(sentence, answers, preview = "", dot = "dot", polish = true) {
+  function card(sentence, preview = "", dot = "dot") {
     const m = document.createElement("div");
     m.className = "msg msg--face";
     m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__slot"><span class="dot"></span></div><div class="block__text"></div></div><div class="actions"></div></div>';
@@ -147,55 +144,61 @@ export function createMessages(list, page) {
     if (preview && typeof preview === "object") block.insertAdjacentHTML("beforeend", codeBlock(preview.code, { lang: preview.lang, name: preview.name, clip: true }));
     else if (preview) { const p = document.createElement("pre"); p.className = "block__out is-preview"; p.textContent = preview; block.append(p); }
     list.append(m); down();
+    // The buttons go once the question is answered (here, or in another window).
+    const answered = () => {
+      const b = actions.querySelector('[aria-busy="true"]');
+      if (b) { doneBtn(b, b.textContent.trim()); setTimeout(() => actions.remove(), 600); } else actions.remove();
+    };
     return {
-      // Waits for a click; the buttons go away.
-      ask: () => new Promise((done) => {
+      // answers: [{ label, value, main }]. Waits for a click.
+      ask: (answers) => new Promise((done) => {
         for (const a of answers) {
           const b = document.createElement("button");
-          const main = a.kind === "btn--primary";
-          b.className = ("btn btn--sm " + (polish && !main ? "btn--bordered btn--async" : a.kind)).trim(); b.type = "button";
-          if (polish && !main) b.innerHTML = '<svg class="icon btn__done" aria-hidden="true"><use href="#i-check"/></svg><span class="btn__label"></span><svg class="btn__spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" pathLength="100"/></svg>';
+          b.className = a.main ? "btn btn--sm btn--filled" : "btn btn--sm btn--bordered btn--async"; b.type = "button";
+          if (!a.main) b.innerHTML = '<svg class="icon btn__done" aria-hidden="true"><use href="#i-check"/></svg><span class="btn__label"></span><svg class="btn__spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" pathLength="100"/></svg>';
           (b.querySelector(".btn__label") || b).textContent = a.label;
           b.addEventListener("click", () => {
-            if (!(polish && !main)) { actions.remove(); done(a.value); return; }
             actions.querySelectorAll(".btn").forEach((x) => x !== b && (x.disabled = true));
-            busy(b, true); done(a.value);
+            if (a.main) b.disabled = true; else busy(b, true);
+            done(a.value);
           });
           actions.append(b);
         }
         down();
       }),
-      // What happened to it: the block's dot, and a note under the sentence.
+      answered,
+      // What came of it: the block's dot, and a note under the sentence.
       set(dot, note) {
-        const b = actions.querySelector('[aria-busy="true"]');
-        if (b) { doneBtn(b); setTimeout(() => actions.remove(), 600); } else actions.remove();
+        answered();
         block.querySelector(".dot").className = dot;
         let out = block.querySelector(".block__out:not(.is-preview)");
         if (!out) { out = document.createElement("pre"); out.className = "block__out"; block.append(out); }
+        out.classList.toggle("block__out--error", dot.includes("danger"));
         out.textContent = note; down();
       },
     };
-  }
-
-  // A reply from an old conversation, opened again: its text, as Markdown.
-  function past(text) {
-    const m = document.createElement("div");
-    m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"><div></div></div><div class="msg__body"><div class="prose"></div></div>';
-    m.querySelector(".prose").innerHTML = markdown(text);
-    list.append(m); down();
-    return { el: m, slot: m.firstChild.firstChild };
   }
 
   // The reply stopped: a card without a dot (Bend-UI drops its column), why, and Try again.
   function failed(why, again) {
     const m = document.createElement("div");
     m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text"></div></div><div class="actions"><button class="btn btn--sm" type="button">Try again</button></div></div>';
+    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text"></div></div><div class="actions"><button class="btn btn--sm btn--bordered btn--neutral" type="button">Try again</button></div></div>';
     m.querySelector(".block__text").textContent = why;
     m.querySelector(".actions .btn").addEventListener("click", () => { m.remove(); again(); });
     list.append(m); down();
   }
 
-  return { mine, theirs, proposal, failed, past };
+  // A command the person ran themselves (!): the command, and what it printed.
+  function ran(command, code, output) {
+    const m = document.createElement("div");
+    m.className = "msg msg--face";
+    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text mono"></div><pre class="block__out"></pre></div></div>';
+    m.querySelector(".block__text").textContent = command;
+    const out = m.querySelector(".block__out");
+    out.textContent = output || "(no output)"; out.classList.toggle("block__out--error", code !== "0");
+    list.append(m); down();
+  }
+
+  return { mine, theirs, card, failed, ran, clear: () => list.replaceChildren() };
 }

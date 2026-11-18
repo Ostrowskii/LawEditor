@@ -139,13 +139,6 @@ def answer(+msg: String, +said: String) -> String:
 
 # ---------- The question, while Claude waits ----------
 
-# One question at a time per turn: the page reads it, and writes the answer next to it.
-def question_file(+turn: String) -> String:
-  "/tmp/laweditor-ask-" ++ Ask.safe_id(turn) ++ ".question"
-
-def answer_file(+turn: String) -> String:
-  "/tmp/laweditor-ask-" ++ Ask.safe_id(turn) ++ ".answer"
-
 # What the page shows: the question on the first line; on the second, how to draw what would change (its
 # language and name, split by a tab); then what would change (a command may hold new lines).
 def question(+msg: String) -> String:
@@ -263,14 +256,11 @@ def refused(r: Rule) -> String:
       ""
 
 # ---------- The session: what the person allowed for this conversation ----------
-# One file per conversation (the page names it), each action ending with the record separator (char 30),
-# since a command may hold new lines. A new conversation starts with none.
+# One file per conversation, kept with the project (engine/PLACES.bend: allowed), so what was allowed stays
+# when the app restarts. Each action ends with the record separator (char 30), since a command may hold new
+# lines. A new conversation starts with none.
 
 def sep() -> Char: Char.from_u32(30)
-
-# Kept with the project: what was allowed in a conversation stays when the app restarts.
-def session_file(+conv: String) -> String:
-  Ask.here(".laweditor/allowed/" ++ Ask.safe_id(conv) ++ ".allowed")
 
 def session_list(+text: String) -> List<&2, String>:
   String.split(text, sep())

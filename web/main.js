@@ -1,7 +1,7 @@
 // LawEditor: the page. The editor's logic is EDITOR.bend (its rules: LAWS.bend);
 // this file reads input, talks to the server and draws.
 
-import { isNarrow } from "bend-ui";
+import { isNarrow, setSide } from "bend-ui";
 import { mountAgent, flyBetween } from "bend-ui/agent";
 import { createThread, openBlock, formBlock } from "bend-ui/thread";
 import claudeMark from "bend-ui/brand/claude.webp";
@@ -10,6 +10,7 @@ import E from "../EDITOR.bend";
 import { markdown } from "./markdown.js";
 import { highlight, toHtml } from "bend-ui/syntax";
 import pkg from "../package.json";
+import { project, get, esc } from "./where.js";
 
 const $ = (id) => document.getElementById(id);
 const win = $("win"), doc = $("doc");
@@ -22,8 +23,10 @@ async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", body });
   return { ok: res.ok, status: res.status, text: await res.text() };
 }
-const readFile = async (name) => { try { return (await api("/api/file/" + name)).text; } catch { return ""; } };
-const writeFile = (name, text) => api("/api/file/" + name, text).catch(() => {});
+// The project's files (GDD.md, TYPES.bend, LAWS.bend): the open conversation's project, asked by name each
+// time (web/where.js), so what is read and written is never another project's.
+const readFile = async (name) => { try { return (await api(project("file/" + name))).text; } catch { return ""; } };
+const writeFile = (name, text) => api(project("file/" + name), text).catch(() => {});
 
 // =========================================================
 // Laws in LAWS.bend: each starts at its "# LAW: "<sentence>"" comment
@@ -86,7 +89,6 @@ function setState(b, state, out = "", how = "") {
 // The law block: the same .block as a sentence. Its dot is the law's state; its text is the law
 // (line by line, in color: Bend-UI's syntax), the reason it failed, or (while the agent works) the sentence being read.
 // No law: no block.
-const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 function drawLaw(el, state, out, sentence, how) {
   const block = (dot, text) => `<div class="block__slot"><span class="${dot}"></span></div>${text}`;
   const code = state === S.ok;
@@ -155,15 +157,20 @@ $("kind").addEventListener("pick", (e) => {
   syncSize(); save();
 });
 
-// GDD.md: one line per block; "# " marks a title.
-let saveT;
+// GDD.md: one line per block; "# " marks a title. It is saved a moment after the last key, to the project
+// the document was read from (saveTo): if the page moves to another conversation first, it is saved at once.
+let saveT = null, saveTo = "";
+function saveNow() {
+  if (saveT === null) return;
+  clearTimeout(saveT); saveT = null;
+  const out = lines().filter((b) => textOf(b)).map((b) => (isTitle(b) ? "# " : "") + textOf(b));
+  api(saveTo, out.join("\n") + "\n").catch(() => {});
+  renderLaws();
+}
 function save() {
   clearTimeout(saveT);
-  saveT = setTimeout(() => {
-    const out = lines().filter((b) => textOf(b)).map((b) => (isTitle(b) ? "# " : "") + textOf(b));
-    writeFile("GDD.md", out.join("\n") + "\n");
-    renderLaws();
-  }, 400);
+  saveTo = project("file/GDD.md");
+  saveT = setTimeout(saveNow, 400);
 }
 
 // =========================================================
@@ -208,7 +215,7 @@ $("gen").addEventListener("click", async () => {
 async function writeLaw(sentence) {
   let good = false, out = "";
   try {
-    const r = await api("/api/generate/" + conn.active, sentence);
+    const r = await api(project("generate/" + conn.active), sentence);
     const nl = r.text.indexOf("\n");
     good = r.text.slice(0, nl) === "ok";
     out = r.text.slice(nl + 1).trim();
@@ -219,27 +226,6 @@ async function writeLaw(sentence) {
   }
   return { good, out };
 }
-
-// The chat heard a rule and the person said Add (chat.js, HEAR.bend). The sentence goes in the document,
-// in its empty last line, and the law agent writes its law there, quietly: the chat stays open.
-// done(state, note) tells the chat how it went, with EDITOR.bend's states.
-document.addEventListener("laweditor:add", async (e) => {
-  const { sentence, done } = e.detail;
-  let b = lines().at(-1);
-  if (b && !textOf(b) && !isTitle(b)) b.querySelector(".block__text").textContent = sentence;
-  else b = makeBlock("text", sentence, b);
-  setState(b, S.empty); ensureLine(); save();
-  if (running) return done(S.empty, "Added to the document. Its law waits for Generate in Laws: another run is going.");
-  if (!conn.active) return done(S.empty, "Added to the document. Connect an AI in Laws to write its law.");
-  running = true; syncGen();
-  await setState(b, S.busy);
-  const { good, out } = await writeLaw(sentence);
-  const next = b.isConnected ? E.after_result(textOf(b) !== sentence, good) : S.empty;
-  if (b.isConnected) await setState(b, next, next === S.empty ? "" : out);
-  running = false; syncGen();
-  await loadLaws();
-  done(next, next === S.ok ? "In the document. Its law compiles: Bend checked it." : next === S.error ? out : "Added to the document. It changed meanwhile: generate it in Laws.");
-});
 
 // The document always ends with an empty line to write in (EDITOR.bend: needs_line).
 function ensureLine() {
@@ -326,7 +312,7 @@ async function loadLaws() {
 function renderLaws() {
   const list = $("laws-list"); list.innerHTML = "";
   const inDoc = new Set(lines().filter((b) => !isTitle(b)).map(textOf));
-  if (!laws.length) list.innerHTML = '<p class="meta doc__note">No laws yet. Write a rule in the document and generate.</p>';
+  if (!laws.length) list.innerHTML = '<p class="detail doc__note">No laws yet. Write a rule in the document and generate.</p>';
   for (const l of laws) {
     const orphan = !inDoc.has(l.sentence);   // its sentence was deleted: keep the law, flag it
     const b = document.createElement("div");
@@ -377,23 +363,19 @@ function refreshDocStates() {
 // =========================================================
 // Side bar, views, full screen
 // =========================================================
+// The side bar opens and closes by itself (Bend-UI: data-side-toggle). The page only remembers how the
+// person left it, for the next time (on a wide screen: a narrow one always starts with it away).
 const side = $("side");
-function setSide(open) {
-  side.classList.toggle("is-open", open);
-  const label = open ? "Close side bar" : "Open side bar";
-  $("side-toggle").setAttribute("aria-label", label); $("side-toggle").title = label;
-}
-$("side-toggle").addEventListener("click", () => setSide(!side.classList.contains("is-open")));
-$("side-open").addEventListener("click", () => setSide(true));
-document.addEventListener("pointerdown", (e) => { if (isNarrow() && side.classList.contains("is-open") && !side.contains(e.target) && !$("side-open").contains(e.target)) setSide(false); });
-
+try { if (!isNarrow() && localStorage.getItem("laweditor.side") === "open") setSide(side, true); } catch {}
+new MutationObserver(() => { if (!isNarrow()) try { localStorage.setItem("laweditor.side", side.classList.contains("is-open") ? "open" : "closed"); } catch {} }).observe(side, { attributes: true, attributeFilter: ["class"] });
 side.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
   side.querySelectorAll("[data-view]").forEach((x) => x === b ? x.setAttribute("aria-current", "page") : x.removeAttribute("aria-current"));
   const laws = b.dataset.view === "doc";
   document.querySelectorAll(".doc-only").forEach((x) => x.hidden = !laws);
   if (laws) setView(lawView);
   else for (const s of ["doc", "laws", "context"]) $("view-" + s).hidden = true;   // chat.js shows Chat
-  if (isNarrow()) setSide(false);
+  if (laws) loadDoc();   // the project's files as they are now: the chat may have added a sentence
+  if (isNarrow()) setSide(side, false);
 }));
 
 // Laws shows the document (its selector: sentences, with laws, or split), or, from their own buttons,
@@ -427,27 +409,47 @@ $("full").addEventListener("click", (e) => {
 });
 
 // =========================================================
-// Start: load the project, reconnect the last AI
+// The document of the open conversation's project
 // =========================================================
-(async function start() {
-  try { const saved = localStorage.getItem("laweditor.agent"); if (saved) win.dataset.agent = saved; } catch {}
-  if (isNarrow()) win.dataset.agent = "sm";
-
-  const [gdd, agentMd] = await Promise.all([readFile("GDD.md"), readFile("AGENT.md")]);
-  $("agent-md").innerHTML = markdown(agentMd || "# AGENT.md not found");
-  $("agent-md").querySelectorAll("pre").forEach(highlight);
+// Read again whenever it may have changed under the page: the page moved to another conversation
+// ("laweditor:where"), the chat added a sentence or its law was written ("laweditor:changed"), or Laws
+// is shown. Not while the person's own change waits to be saved, or the law agent runs from this page.
+let loading = 0;
+async function loadDoc() {
+  if (running || saveT !== null) return;
+  const me = ++loading;
+  const gdd = await readFile("GDD.md");
   await loadLaws();
-
-  const lines = gdd.split("\n").filter((l) => l.trim());
-  for (const line of lines) {
+  if (me !== loading || running || saveT !== null) return;
+  const had = document.activeElement?.closest?.("#doc");
+  doc.querySelectorAll(".pair").forEach((x) => x.remove());
+  current = null;
+  for (const line of gdd.split("\n").filter((l) => l.trim())) {
     const title = line.startsWith("# ");
     const text = title ? line.slice(2) : line;
     const b = makeBlock(title ? "title" : "text", text);
     const l = !title && lawFor(text);
     if (l) setState(b, S.ok, l.code.split("\n").slice(1).join("\n"));
   }
-  focusEnd(makeBlock("text"));
-  renderLaws(); renderAgents(); syncGen();
+  const last = makeBlock("text");
+  if (had) focusEnd(last);
+  renderLaws(); syncGen();
+}
+document.addEventListener("laweditor:where", () => { saveNow(); loadDoc(); });
+document.addEventListener("laweditor:changed", loadDoc);
+
+// =========================================================
+// Start: load the project, reconnect the last AI
+// =========================================================
+(async function start() {
+  try { const saved = localStorage.getItem("laweditor.agent"); if (saved) win.dataset.agent = saved; } catch {}
+  if (isNarrow()) win.dataset.agent = "sm";
+
+  let agentMd = ""; try { agentMd = await get("/api/told/AGENT.md"); } catch {}
+  $("agent-md").innerHTML = markdown(agentMd || "# AGENT.md not found");
+  $("agent-md").querySelectorAll("pre").forEach((pre) => highlight(pre));
+  await loadDoc();
+  renderAgents();
 
   try { const ai = localStorage.getItem("laweditor.ai"); if (ai) connect(ai); } catch {}
 })();

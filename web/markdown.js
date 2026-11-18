@@ -1,14 +1,15 @@
-// Markdown to HTML, for the context views (AGENT.md in Laws, CHAT.md in Chat).
+// Markdown to HTML, for the chat's replies and the context views (AGENT.md in Laws, CHAT.md in Chat).
 export function markdown(src) {
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const inline = (s) => esc(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(https?:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-  const out = []; let list = null, code = null;
+  const out = []; let list = null, code = null, lang = "";
   for (const line of src.split("\n")) {
-    if (code !== null) { if (/^```/.test(line)) { out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); code = null; } else code.push(line); continue; }
-    if (/^```/.test(line)) { if (list) { out.push(`<${list.t}>${list.items.join("")}</${list.t}>`); list = null; } code = []; continue; }
+    // A fenced block keeps its language (```js): the page colors it with Bend-UI's syntax.
+    if (code !== null) { if (/^```/.test(line)) { out.push(`<pre${lang ? ` data-lang="${lang}"` : ""}><code>${esc(code.join("\n"))}</code></pre>`); code = null; } else code.push(line); continue; }
+    if (/^```/.test(line)) { if (list) { out.push(`<${list.t}>${list.items.join("")}</${list.t}>`); list = null; } code = []; lang = line.slice(3).trim().replace(/[^\w-]/g, ""); continue; }
     const h = line.match(/^(#{1,3}) (.*)/), li = line.match(/^(\s*)(-|\d+\.) (.*)/);
     if (li && !li[1]) {
       const t = li[2] === "-" ? "ul" : "ol";

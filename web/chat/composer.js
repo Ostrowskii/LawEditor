@@ -1,13 +1,13 @@
 // The composer: one field with the send button inside. When Send is on is CHAT.bend.
 // While the agent answers, the send button is Stop (Bend-UI's .composer__stop, a square): onStop ends the turn.
 // Typing / at the start lists the commands (CHAT.bend's commands); typing @ lists the project's files
-// (GET /api/files), and a picked file becomes a chip above the text (.composer__chips). The message goes out
-// with its files: onSend(text, files).
+// (files(): the server's list), and a picked file becomes a chip above the text (.composer__chips). The
+// message goes out with its files: onSend(text, files). Whether the chat answers or a question waits comes
+// from the conversation itself (set): the composer doesn't guess.
 import C from "../../harness/CHAT.bend";
+import { esc } from "../where.js";
 
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-export function createComposer(form, onSend, onStop = () => {}, onCommand = () => {}) {
+export function createComposer(form, { onSend, onStop, onCommand, files: listFiles }) {
   const text = form.querySelector(".composer__text"), send = form.querySelector(".composer__send");
   const field = form.querySelector(".composer__field"), menu = form.querySelector("#suggest");
   let answering = false, asking = false, files = [], list = [], pick = 0, kind = "";
@@ -22,8 +22,7 @@ export function createComposer(form, onSend, onStop = () => {}, onCommand = () =
 
   // ---------- Suggestions: / commands and @ files ----------
   const commands = C.commands().split("\n").map((l) => l.split("\t"));
-  let projectFiles = null;
-  const loadFiles = async () => { try { projectFiles = (await (await fetch("/api/files")).text()).split("\n").filter(Boolean); } catch { projectFiles = []; } };
+  let projectFiles = [];
   const word = () => { const before = text.value.slice(0, text.selectionStart); const m = before.match(/(^|\s)@([^\s@]*)$/); return m ? m[2] : null; };
   function close() { menu.hidden = true; list = []; kind = ""; }
   function draw() {
@@ -34,7 +33,7 @@ export function createComposer(form, onSend, onStop = () => {}, onCommand = () =
   async function suggest() {
     const v = text.value, at = word();
     if (/^\/\S*$/.test(v)) { kind = "/"; list = commands.filter(([c]) => c.startsWith(v)); }
-    else if (at !== null) { kind = "@"; if (!projectFiles) await loadFiles(); list = projectFiles.filter((f) => f.toLowerCase().includes(at.toLowerCase()) && !files.includes(f)).slice(0, 8).map((f) => [f, ""]); }
+    else if (at !== null) { kind = "@"; projectFiles = await listFiles(); list = projectFiles.filter((f) => f.toLowerCase().includes(at.toLowerCase()) && !files.includes(f)).slice(0, 8).map((f) => [f, ""]); }
     else return close();
     pick = 0; draw();
   }
@@ -66,23 +65,24 @@ export function createComposer(form, onSend, onStop = () => {}, onCommand = () =
     }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
   });
-  form.addEventListener("submit", async (e) => {
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (answering) { onStop(); return; }
+    if (answering && !asking) { onStop(); return; }
     const t = text.value.trim();
     if (!C.can_send(asking, answering, t.length)) return;
     const sent = files; files = []; chips(); close();
     text.value = ""; answering = true; sync();
-    await onSend(t, sent);
-    answering = false; sync(); text.focus();
+    onSend(t, sent);
   });
   sync();
-  // A question waits for the person: the field is off, and says why, until they answer.
+  // What the conversation is doing: the chat answers (Send is Stop), or a question waits for the person
+  // (the field is off, and says why, until they answer).
   const placeholder = text.placeholder;
-  function hold(on, why = "Answer the question above to keep talking") {
-    asking = on; text.disabled = on;
-    text.placeholder = on ? why : placeholder;
-    sync(); if (!on) text.focus();
+  function set(isAnswering, isAsking) {
+    const freed = (answering || asking) && !isAnswering && !isAsking;
+    answering = isAnswering; asking = isAsking; text.disabled = isAsking;
+    text.placeholder = isAsking ? "Answer the question above to keep talking" : placeholder;
+    sync(); if (freed && !form.hidden) text.focus();
   }
-  return { focus: () => text.focus(), hold, forget: () => { projectFiles = null; } };
+  return { focus: () => text.focus(), set };
 }
