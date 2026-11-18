@@ -10,6 +10,6 @@
     "check": "bend PROOF.bend && bend server.bend --check-only",
     "build": "bend web/index.html -o dist",
     "server": "bend server.bend -o dist/laweditor-server",
-    "start": "bun run build && bun run server && mkdir -p project && cd project && ../dist/laweditor-server ../dist ../AGENT.md"
+    "start": "bun run build && bun run server && mkdir -p projects && cd projects && ../dist/laweditor-server ../dist ../AGENT.md"
   }
 }

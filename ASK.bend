@@ -4,6 +4,12 @@
 import Base
 import ./MODELS.bend as Models
 
+# ---------- The project ----------
+# The server runs in projects/; .current points to the project picked now (server.bend: projects).
+# Every project file is read through it, so picking another project changes them all.
+def here(+name: String) -> String:
+  ".current/" ++ name
+
 # ---------- Text ----------
 
 # The text after the first place marker appears ("" if it never does).
@@ -174,8 +180,9 @@ def safe_id(s: String) -> String:
     case SCon{+h, t}:
       safe_id.keep(h, (Char.is_alpha(h) || Char.is_digit(h)), safe_id(t))
 
+# Kept with the project, so an old conversation opens again with what it did (GET /api/work/<turn>).
 def turn_file(id: String) -> String:
-  "/tmp/laweditor-turn-" ++ safe_id(id) ++ ".jsonl"
+  here(".laweditor/turns/" ++ safe_id(id) ++ ".jsonl")
 
 # With --include-partial-messages, Claude sends each piece of text as it writes it:
 # {"type":"stream_event","event":{"type":"message_start",…}} opens a message, then

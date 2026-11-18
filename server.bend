@@ -160,9 +160,14 @@ def run(program: String, args: List<String>, timeout_ms: U32) -> IO(U32 & String
     r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(program, args, "", 4194304, timeout_ms)
     return run_out(r)
 
+# A program run in the project picked now (.current): sh goes there first; the program and its args are
+# passed as arguments, never pasted into the command.
+def run_in(program: String, args: List<String>, timeout_ms: U32) -> IO(U32 & String):
+  run("sh", "-c" <> "cd .current && exec \"$@\"" <> "sh" <> program <> args, timeout_ms)
+
 def run_to(+file: String, program: String, args: List<String>, timeout_ms: U32) -> IO(U32 & String):
   do IO<U32 & String>:
-    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run("sh", "-c" <> "echo $$ > \"$1\"; out=\"$0\"; shift; exec \"$@\" > \"$out\"" <> file <> (file ++ ".pid") <> program <> args, "", 4194304, timeout_ms)
+    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run("sh", "-c" <> "out=\"$(pwd)/$0\"; echo $$ > \"$out.pid\"; cd .current && exec \"$@\" > \"$out\"" <> file <> program <> args, "", 4194304, timeout_ms)
     text : String <- read_file(file)
     return run_to.out(run_out(r), text)
 
@@ -202,8 +207,8 @@ def check_reply(agent: U32 & String, check: U32 & String) -> String:
 def generate(+ai: String, agent_md: String, sentence: String) -> IO(String):
   do IO<String>:
     rules : String <- read_file(agent_md)
-    agent : U32 & String <- run(ai, agent_args(ai, rules ++ "\n\n## Sentence\n\n" ++ sentence), 600000)
-    check : U32 & String <- run("bend", ["LAWS.bend", "--check-only"], 120000)
+    agent : U32 & String <- run_in(ai, agent_args(ai, rules ++ "\n\n## Sentence\n\n" ++ sentence), 600000)
+    check : U32 & String <- run_in("bend", ["LAWS.bend", "--check-only"], 120000)
     return check_reply(agent, check)
 
 # CHAT.md (what the chat is told) lives next to AGENT.md (what the law agent is told).
@@ -264,7 +269,7 @@ def chat_reply(is_codex: Bool, agent: U32 & String) -> String:
 def chat_run(is_codex: Bool, +ai: String, +id: String, args: List<String>) -> IO(U32 & String):
   match is_codex:
     case True{}:
-      run(ai, args, 600000)
+      run_in(ai, args, 600000)
     case False{}:
       run_to(Ask.turn_file(id), ai, args, 600000)
 
@@ -299,33 +304,80 @@ def stop(+id: String) -> IO(String):
     r : U32 & String <- run("sh", ["-c", "kill \"$(cat \"$0\")\"", Ask.turn_file(id) ++ ".pid"], 5000)
     return ok_text("stopped")
 
-# ---------- Around the chat: the project's files, its folder, the conversations ----------
-# The server runs in the project's folder. The conversations are kept with the project, in .laweditor/chats
-# (a folder the file list leaves out): one file each, its title on the first line, then the conversation.
+# ---------- Projects ----------
 
 def files_list.out(r: U32 & String) -> String:
   (code, out) = r
   out
 
+# The server runs in projects/. Each project is a folder there: its sentences (GDD.md), TYPES.bend and
+# LAWS.bend, game/ (what the chat builds), and .laweditor/ (its name, conversations, what was allowed,
+# each turn's record). .current points to the one picked now. sh gets every name as an argument.
+
+def make_project_sh() -> String:
+  "mkdir -p \"$0/game\" \"$0/.laweditor/chats\" \"$0/.laweditor/allowed\" \"$0/.laweditor/turns\"; [ -e \"$0/.laweditor/name\" ] || printf '%s' \"$1\" > \"$0/.laweditor/name\"; [ -e \"$0/GDD.md\" ] || : > \"$0/GDD.md\"; [ -e \"$0/TYPES.bend\" ] || printf 'import Base\\n' > \"$0/TYPES.bend\"; [ -e \"$0/LAWS.bend\" ] || printf 'import Base\\nimport ./TYPES.bend as T\\n' > \"$0/LAWS.bend\"; ln -sfn \"$0\" .current; printf '%s' \"$0\""
+
+# GET /api/projects: the one picked now on the first line, then one per line: its folder, a tab, its name.
+def projects_list() -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "readlink .current 2>/dev/null || echo; for d in */; do d=${d%/}; [ -d \"$d\" ] || continue; [ -e \"$d/.laweditor/draft\" ] && continue; n=$(cat \"$d/.laweditor/name\" 2>/dev/null || printf '%s' \"$d\"); printf '%s\\t%s\\n' \"$d\" \"$n\"; done"], 5000)
+    return ok_text(files_list.out(r))
+
+# POST /api/projects, body: the name. Makes the project (or finds it) and picks it.
+def project_new(+name: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", make_project_sh(), Chat.slug(name), String.trim(name)], 5000)
+    return ok_text(files_list.out(r))
+
+# POST /api/draft/<conversation>: a new conversation with no game gets its own folder, marked as a draft:
+# it isn't a game (not in the list of games) until it has a sentence or a file (POST /api/promote).
+def project_draft(+conv: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", make_project_sh() ++ "; : > \"$0/.laweditor/draft\"", Chat.slug(conv), ""], 5000)
+    return ok_text(files_list.out(r))
+
+# POST /api/promote, body: the game's name. A draft with a sentence (GDD.md) or a file in game/ becomes a
+# game with that name; otherwise nothing changes. Answers "promoted" when it did.
+def project_promote(+name: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "[ -e .current/.laweditor/draft ] || exit 0; { [ -n \"$(ls -A .current/game 2>/dev/null)\" ] || [ -s .current/GDD.md ]; } || exit 0; printf '%s' \"$0\" > .current/.laweditor/name; rm .current/.laweditor/draft; printf promoted", String.trim(name)], 5000)
+    return ok_text(files_list.out(r))
+
+# POST /api/rename/<folder>, body: the game's new name.
+def project_rename(+folder: String, +name: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "[ -d \"$0/.laweditor\" ] && printf '%s' \"$1\" > \"$0/.laweditor/name\"; printf ok", Chat.slug(folder), String.trim(name)], 5000)
+    return ok_text(files_list.out(r))
+
+# POST /api/project/<folder>: picks a project that exists.
+def project_pick(+folder: String) -> IO(String):
+  do IO<String>:
+    r : U32 & String <- run("sh", ["-c", "[ -d \"$0\" ] && ln -sfn \"$0\" .current && printf ok", Chat.slug(folder)], 5000)
+    return ok_text(files_list.out(r))
+
+# ---------- Around the chat: the project's files, its folder, the conversations ----------
+# The server runs in the project's folder. The conversations are kept with the project, in .laweditor/chats
+# (a folder the file list leaves out): one file each, its title on the first line, then the conversation.
+
 # GET /api/files: the project's files, one path per line (for @ in the composer).
 def files_list() -> IO(String):
   do IO<String>:
-    r : U32 & String <- run("sh", ["-c", "find . -type f -not -path '*/.*' | sed 's|^\\./||' | sort | head -300"], 5000)
+    r : U32 & String <- run("sh", ["-c", "cd .current && find . -type f -not -path '*/.*' | sed 's|^\\./||' | sort | head -300"], 5000)
     return ok_text(files_list.out(r))
 
 # POST /api/open-folder: opens the project's folder on the computer.
 def open_folder() -> IO(String):
   do IO<String>:
-    r : U32 & String <- run("open", ["."], 5000)
+    r : U32 & String <- run_in("open", ["."], 5000)
     return ok_text("ok")
 
 def chat_file(+id: String) -> String:
-  ".laweditor/chats/" ++ Ask.safe_id(id) ++ ".txt"
+  Ask.here(".laweditor/chats/" ++ Ask.safe_id(id) ++ ".txt")
 
 # POST /api/conversation/<id>, body: the conversation. GET it back; GET /api/conversations lists them.
 def conversation_save(+id: String, +body: String) -> IO(String):
   do IO<String>:
-    r : U32 & String <- run("mkdir", ["-p", ".laweditor/chats"], 5000)
+    r : U32 & String <- run_in("mkdir", ["-p", ".laweditor/chats"], 5000)
     write_file(chat_file(id), Chat.title_of(body) ++ "\n" ++ body)
     return ok_text("ok")
 
@@ -334,10 +386,11 @@ def conversation_get(+id: String) -> IO(String):
     text : String <- read_file(chat_file(id))
     return ok_text(text)
 
-# One line each, newest first: the id, a tab, the title.
+# Every conversation of every project, newest first, one line each: its folder, its game's name (none for
+# a draft), its id and its title, split by tabs.
 def conversations() -> IO(String):
   do IO<String>:
-    r : U32 & String <- run("sh", ["-c", "cd .laweditor/chats 2>/dev/null && for f in $(ls -t *.txt 2>/dev/null); do printf '%s\t%s\n' \"${f%.txt}\" \"$(head -n 1 \"$f\")\"; done"], 5000)
+    r : U32 & String <- run("sh", ["-c", "for f in $(ls -t */.laweditor/chats/*.txt 2>/dev/null); do d=${f%%/*}; i=$(basename \"$f\" .txt); g=''; [ -e \"$d/.laweditor/draft\" ] || g=$(cat \"$d/.laweditor/name\" 2>/dev/null || printf '%s' \"$d\"); printf '%s\\t%s\\t%s\\t%s\\n' \"$d\" \"$g\" \"$i\" \"$(head -n 1 \"$f\")\"; done"], 5000)
     return ok_text(files_list.out(r))
 
 # GET /api/output/<id>/<n>: what the n-th action of the turn answered (its first lines).
@@ -550,7 +603,7 @@ def route_file_get.at(allowed: Bool, name: String) -> IO(String):
   match allowed:
     case True{}:
       do IO<String>:
-        text : String <- read_file(name)
+        text : String <- read_file(Ask.here(name))
         return ok_text(text)
     case False{}:
       IO.pure(String, not_found())
@@ -685,8 +738,15 @@ def route_get.around(+path: String, dist: String, +agent_md: String, files: Bool
     case False{} False{} False{}:
       route_get.allowed(String.starts_with(path, "/api/allowed/"), path, dist, agent_md)
 
+def route_get.projects(+path: String, dist: String, +agent_md: String, projects: Bool) -> IO(String):
+  match projects:
+    case True{}:
+      projects_list()
+    case False{}:
+      route_get.around(path, dist, agent_md, String.eq(path, "/api/files"), String.eq(path, "/api/conversations"), String.starts_with(path, "/api/conversation/"))
+
 def route_get(+path: String, dist: String, +agent_md: String) -> IO(String):
-  route_get.around(path, dist, agent_md, String.eq(path, "/api/files"), String.eq(path, "/api/conversations"), String.starts_with(path, "/api/conversation/"))
+  route_get.projects(path, dist, agent_md, String.eq(path, "/api/projects"))
 
 # POST: /api/generate/<ai> (body: the sentence), /api/chat/<ai>/<model> (body: the conversation),
 # /api/file/<name> (body: the file).
@@ -694,7 +754,7 @@ def route_file_post.at(allowed: Bool, name: String, body: String) -> IO(String):
   match allowed:
     case True{}:
       do IO<String>:
-        write_file(name, body)
+        write_file(Ask.here(name), body)
         return ok_text("saved")
     case False{}:
       IO.pure(String, not_found())
@@ -768,8 +828,28 @@ def route_post.around(+path: String, +body: String, agent_md: String, folder: Bo
     case False{} False{}:
       route_post.stop(String.starts_with(path, "/api/stop/"), path, body, agent_md)
 
+def route_post.games(+path: String, +body: String, agent_md: String, draft: Bool, promote: Bool, rename: Bool) -> IO(String):
+  match draft promote rename:
+    case True{} _ _:
+      project_draft(after(path, "/api/draft/"))
+    case False{} True{} _:
+      project_promote(body)
+    case False{} False{} True{}:
+      project_rename(after(path, "/api/rename/"), body)
+    case False{} False{} False{}:
+      route_post.around(path, body, agent_md, String.eq(path, "/api/open-folder"), String.starts_with(path, "/api/conversation/"))
+
+def route_post.projects(+path: String, +body: String, agent_md: String, make: Bool, pick: Bool) -> IO(String):
+  match make pick:
+    case True{} _:
+      project_new(body)
+    case False{} True{}:
+      project_pick(after(path, "/api/project/"))
+    case False{} False{}:
+      route_post.games(path, body, agent_md, String.starts_with(path, "/api/draft/"), String.eq(path, "/api/promote"), String.starts_with(path, "/api/rename/"))
+
 def route_post(+path: String, +body: String, agent_md: String) -> IO(String):
-  route_post.around(path, body, agent_md, String.eq(path, "/api/open-folder"), String.starts_with(path, "/api/conversation/"))
+  route_post.projects(path, body, agent_md, String.eq(path, "/api/projects"), String.starts_with(path, "/api/project/"))
 
 def route.at(is_post: Bool, +req: String, dist: String, agent_md: String) -> IO(String):
   match is_post:
@@ -863,8 +943,9 @@ def first.at(waiting: Bool, s: Socket, req: String, dist: String, agent_md: Stri
     case False{}:
       answer(s, req, dist, agent_md)
 
+# A POST that says its body is empty (Content-Length: 0, as an empty fetch sends) has nothing more to wait for.
 def first(s: Socket, +req: String, dist: String, agent_md: String) -> IO(Unit):
-  first.at((String.eq(req_word(req, 0n), "POST") && String.is_empty(req_body(req))), s, req, dist, agent_md)
+  first.at((String.eq(req_word(req, 0n), "POST") && String.is_empty(req_body(req)) && Bool.not(String.contains(String.to_lower(req), "content-length: 0\r"))), s, req, dist, agent_md)
 
 def talk_read(m: Socket & Result<&1, &1, U32 & String, Maybe<&1, String>>, dist: String, agent_md: String) -> IO(Unit):
   (s, r) = m
@@ -925,9 +1006,7 @@ def start(args: List<String>, l: Listener) -> IO(Unit):
 def main() -> IO(Unit):
   do IO<Unit>:
     args : List<String> <- IO.args()
-    ensure_file("GDD.md", "")
-    ensure_file("TYPES.bend", "import Base\n")
-    ensure_file("LAWS.bend", "import Base\nimport ./TYPES.bend as T\n")
+    first : U32 & String <- run("sh", ["-c", "[ -d .current ] || { p=$(ls -1d */ 2>/dev/null | head -n 1); [ -n \"$p\" ] && ln -sfn \"${p%/}\" .current; }; true"], 5000)
     l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", port()))
     IO.print("LawEditor: http://" ++ address())
     start(args, l)

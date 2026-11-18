@@ -1,6 +1,7 @@
 node_modules/
 dist/
 project/
+projects/
 *.mjs
 .DS_Store
 bun.lock

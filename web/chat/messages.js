@@ -123,6 +123,8 @@ export function createMessages(list, page) {
         }
         prose(answer); finish(); phase = C.done(); down();
       },
+      // From an old conversation, opened again: no motion, the answer and what it changed.
+      restore(answer) { prose(answer); finish(); phase = C.done(); },
       // It stopped with an error: the working line goes; the error card comes from failed().
       stop() { clearInterval(tick); working.remove(); if (!text.isConnected && !tools && !plan) m.remove(); },
       phase: () => phase,

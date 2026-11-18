@@ -79,9 +79,9 @@ export function createComposer(form, onSend, onStop = () => {}, onCommand = () =
   sync();
   // A question waits for the person: the field is off, and says why, until they answer.
   const placeholder = text.placeholder;
-  function hold(on) {
+  function hold(on, why = "Answer the question above to keep talking") {
     asking = on; text.disabled = on;
-    text.placeholder = on ? "Answer the question above to keep talking" : placeholder;
+    text.placeholder = on ? why : placeholder;
     sync(); if (!on) text.focus();
   }
   return { focus: () => text.focus(), hold, forget: () => { projectFiles = null; } };

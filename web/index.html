@@ -18,11 +18,11 @@
     <div class="side__head">
       <button class="btn btn--ghost btn--icon" id="side-toggle" aria-label="Open side bar" title="Open side bar"><svg class="icon"><use href="#i-panel-left"/></svg></button>
     </div>
-    <button class="btn btn--ghost" data-view="chat" aria-current="page" title="Chat"><svg class="icon"><use href="#i-text"/></svg><span class="side__text">Chat</span></button>
+    <button class="btn btn--ghost" id="new-conversation" type="button" title="New conversation"><svg class="icon"><use href="#i-plus"/></svg><span class="side__text">New conversation</span></button>
+    <button class="btn btn--ghost" data-view="chat" aria-current="page" title="Chat" hidden><svg class="icon"><use href="#i-text"/></svg><span class="side__text">Chat</span></button>
     <button class="btn btn--ghost" data-view="doc" title="Laws"><svg class="icon"><use href="#i-shield"/></svg><span class="side__text">Laws</span></button>
     <button class="btn btn--ghost" data-view="debug" title="Debug"><svg class="icon"><use href="#i-code"/></svg><span class="side__text">Debug</span></button>
-    <h2 class="side__label side__text" id="history-label" hidden>Conversations</h2>
-    <div class="side__items" id="history"></div>
+    <div class="side__body" id="history"></div>
   </aside>
 
   <div class="window__main">
@@ -154,6 +154,7 @@
         </div>
       </div>
       <div class="composer__bar">
+        <div class="dropdown" id="game"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><svg class="icon icon--sm"><use href="#i-folder"/></svg><span>Game</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up menu--wide" role="menu" hidden></div></div>
         <div class="dropdown"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><span>Claude</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
         <div class="dropdown"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><span>Loading…</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
         <div class="dropdown" id="mode"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" title="What the chat may do"><svg class="icon icon--sm"><use href="#i-shield"/></svg><span></span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>

@@ -268,8 +268,9 @@ def refused(r: Rule) -> String:
 
 def sep() -> Char: Char.from_u32(30)
 
+# Kept with the project: what was allowed in a conversation stays when the app restarts.
 def session_file(+conv: String) -> String:
-  "/tmp/laweditor-session-" ++ Ask.safe_id(conv) ++ ".allowed"
+  Ask.here(".laweditor/allowed/" ++ Ask.safe_id(conv) ++ ".allowed")
 
 def session_list(+text: String) -> List<&2, String>:
   String.split(text, sep())

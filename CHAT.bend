@@ -76,3 +76,103 @@ def title_of.first(xs: List<&2, String>) -> String:
 
 def title_of(+conversation: String) -> String:
   title_of.at(String.trim(title_of.first(String.lines(conversation))), String.starts_with(String.trim(title_of.first(String.lines(conversation))), "Person: "))
+
+# ---------- Projects ----------
+
+# A project's folder name, from the name the person gives it: lower case, letters and digits, "-" for the rest.
+# "Rio Negro" is rio-negro; a name with nothing to keep is "project".
+def slug.char(keep: Bool, +c: Char) -> Char:
+  match keep:
+    case True{}:
+      c
+    case False{}:
+      '-'
+
+def slug.go(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{+h, t}:
+      SCon{slug.char((Char.is_alpha(h) || Char.is_digit(h)), h), slug.go(t)}
+
+def slug.or(+s: String, empty: Bool) -> String:
+  match empty:
+    case True{}:
+      "project"
+    case False{}:
+      s
+
+def slug(+name: String) -> String:
+  slug.or(slug.go(String.to_lower(String.trim(name))), String.eq(String.trim(name), ""))
+
+# ---------- A conversation's game ----------
+# A conversation starts with no game. The chat names the game once, on a line of its own, when it starts
+# building or hears the first rule: GAME: "Rio Negro" (CHAT.md teaches it). The page hides the line.
+
+def is_game_line(+line: String) -> Bool:
+  String.starts_with(String.trim(line), "GAME:")
+
+def game.drop_quote(quote: Bool, +c: Char, rest: String) -> String:
+  match quote:
+    case True{}:
+      rest
+    case False{}:
+      SCon{c, rest}
+
+def game.unquote(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{+h, t}:
+      game.drop_quote(Char.is_eq(h, '"'), h, game.unquote(t))
+
+def game.name_of(+line: String) -> String:
+  String.trim(game.unquote(String.drop(String.trim(line), 5n)))
+
+def game.pick(game: Bool, +line: String, +rest: String) -> String:
+  match game:
+    case True{}:
+      game.name_of(line)
+    case False{}:
+      rest
+
+def game.first(ls: List<&2, String>) -> String:
+  match ls:
+    case Nil{}:
+      ""
+    case +h <> t:
+      game.pick(is_game_line(h), h, game.first(t))
+
+# The name the chat gave the game in a reply ("" if it gave none).
+def game_name(+reply: String) -> String:
+  game.first(String.lines(reply))
+
+def game_words.keep(game: Bool, +line: String, rest: List<&2, String>) -> List<&2, String>:
+  match game:
+    case True{}:
+      rest
+    case False{}:
+      line <> rest
+
+def game_words.go(ls: List<&2, String>) -> List<&2, String>:
+  match ls:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      game_words.keep(is_game_line(h), h, game_words.go(t))
+
+# What the person reads: the reply without its GAME: line.
+def game_words(reply: String) -> String:
+  String.trim(String.join(game_words.go(String.lines(reply)), "\n"))
+
+# The conversation as the chat reads it: with a game, a line that names it comes first (CHAT.md: the chat
+# doesn't name it again).
+def with_game.of(conversation: String, game: String, none: Bool) -> String:
+  match none:
+    case True{}:
+      conversation
+    case False{}:
+      "Game: \"" ++ game ++ "\"\n\n" ++ conversation
+
+def with_game(conversation: String, +game: String) -> String:
+  with_game.of(conversation, game, String.eq(game, ""))

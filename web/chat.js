@@ -16,19 +16,26 @@ import { createMode } from "./chat/mode.js";
 import { markdown } from "./markdown.js";
 import { highlight } from "bend-ui/syntax";
 import { createStart } from "./chat/start.js";
+import { createGame } from "./chat/game.js";
 
 const $ = (id) => document.getElementById(id);
 const said = [];   // [{ who, text }], oldest first
 
 const messages = createMessages($("chat"), document.querySelector(".page"));
 const face = createFace();
-const [aiDd, modelDd] = document.querySelectorAll("#composer .composer__bar .dropdown");
+const [aiDd, modelDd] = document.querySelectorAll("#composer .composer__bar .dropdown:not(#game)");
 let saved = null; try { saved = localStorage.getItem("laweditor.ai"); } catch {}
 const models = createModels(aiDd, modelDd, saved);
 const chatMode = createMode($("mode"), aiDd, models.get().ai, () => conversationId);   // what the chat may do (POLICY.bend, HARNESS.md)
 
 // The conversation as the agent reads it (AGENT.md, "Chat").
-const conversation = () => said.map((m) => (m.who === C.person() ? "Person: " : "Agent: ") + m.text).join("\n");
+// The conversation as it is kept (talk) and as the chat reads it (with its game's name, if it has one).
+const talk = () => said.map((m) => (m.who === C.person() ? "Person: " : "Agent: ") + m.text).join("\n");
+const conversation = () => C.with_game(talk(), convGame);
+// The conversation's game: none yet (a draft folder of its own), or one that exists. Its folder is where
+// the chat works (the server's .current). The game button is optional; nothing asks before talking.
+let convFolder = null, convGame = "";
+const game = createGame($("game"));
 
 async function post(path, body) {
   try { return await (await fetch(path, { method: "POST", body })).text(); }
@@ -89,7 +96,7 @@ async function streamed(path, body, reply) {
   done = true; await poll;
   try { context(reply.work(await (await fetch(`/api/work/${id}`)).text(), id)); } catch {}   // the last actions and every file changed
   turnId = null;
-  return { res, reply };
+  return { res, reply, turn: id };
 }
 const textOf = (res) => res.slice(res.indexOf("\n") + 1).trim() || "The agent didn't answer.";
 const failed = (res) => res.startsWith("error");
@@ -99,7 +106,7 @@ const failed = (res) => res.startsWith("error");
 let conversationId = newId();
 async function askFirst(model, reply, extra) {
   const turn = await streamed(`/api/ask/${model}/${conversationId}`, conversation() + extra, reply);
-  return { reply: turn.reply, answer: textOf(turn.res), failed: failed(turn.res) };
+  return { reply: turn.reply, answer: textOf(turn.res), failed: failed(turn.res), turn: turn.turn };
 }
 
 // extra: a line for the chat after the conversation (after Switch, OFFER.told()).
@@ -107,10 +114,10 @@ async function ask(reply, extra = "") {
   const { ai, model } = models.get();
   if (P.mode_asks_at(chatMode.get())) return askFirst(model, reply, extra);
   const turn = await streamed(`/api/chat/${ai}/${model}`, conversation() + extra, reply);
-  return { reply: turn.reply, answer: textOf(turn.res), failed: failed(turn.res) };
+  return { reply: turn.reply, answer: textOf(turn.res), failed: failed(turn.res), turn: turn.turn };
 }
 // What the person reads: the reply without its LAW:, MODE: and PLAN: lines (HEAR.bend, OFFER.bend, ASK.bend).
-function shown(text) { return O.words(H.words(A.plan_words(text))); }
+function shown(text) { return O.words(H.words(A.plan_words(C.game_words(text)))); }
 
 // The chat offers the mode (OFFER.bend): in Only read, a MODE: line becomes Switch / Stay.
 // Switch moves the picker and sends the request again, now in Ask before changes; Stay changes nothing.
@@ -132,8 +139,8 @@ async function offered(answer) {
   if (!O.switches(choice)) return;
   const first = messages.theirs();
   face.to(first.slot); face.lookAt(first.el);
-  const { reply, answer: built } = await ask(first, "\n" + O.told());
-  said.push({ who: C.agent(), text: built });
+  const { reply, answer: built, turn } = await ask(first, "\n" + O.told());
+  said.push({ who: C.agent(), text: built, turn });
   await reply.write(shown(built));
   face.lookAt(null);
   hear(built);
@@ -150,6 +157,12 @@ let started = false;
 
 const composer = createComposer($("composer"), async (text, files) => {
   const from = await leaveStart();
+  if (!convFolder) {
+    const g = game.chosen();
+    if (g) { await post(`/api/project/${encodeURIComponent(g.folder)}`, ""); convFolder = g.folder; convGame = g.name; }
+    else { await post(`/api/draft/${conversationId}`, ""); convFolder = conversationId; }
+    game.lock(convFolder, convGame);
+  }
   said.push({ who: C.person(), text: C.with_files(text, files.join(", ")) }); messages.mine(text, files);
   await reply(from);
 }, () => { if (!turnId) return; stopped = true; post(`/api/stop/${turnId}`, ""); }, command);
@@ -163,60 +176,128 @@ async function leaveStart() {
 
 // Commands typed with / (CHAT.bend's commands).
 function command(name) {
-  if (name === "/clear") location.reload();   // a new conversation; the old ones stay in the list
+  if (name === "/clear") fresh();   // a new conversation; the old ones stay in the list
   if (name === "/laws") document.querySelector('#side [data-view="doc"]').click();
   if (name === "/context") document.querySelector('#chat-view [data-view="context"]')?.click();
 }
 
 // The conversations, kept with the project (POST/GET /api/conversation/<id>, GET /api/conversations):
 // saved after each turn, listed in the side bar under Chat, newest first; one opens where it stopped.
+// After the conversation, a line with the record separator, then each message's turn (the agent's), so
+// opening it again draws what each reply did (GET /api/work/<turn>).
+const TURNS = "\n\u001e\n";
 async function saveConversation() {
-  await post(`/api/conversation/${conversationId}`, conversation());
+  await post(`/api/conversation/${conversationId}`, talk() + TURNS + said.map((m) => m.turn || "").join(","));
   listConversations();
 }
+// The side bar: the conversations of each game together, under the game's name (click it to rename;
+// + starts a conversation in it), the games most recently used first; conversations with no game below.
 async function listConversations() {
+  const box = $("history");
   let rows = [];
   try { rows = (await (await fetch("/api/conversations")).text()).split("\n").filter(Boolean).map((l) => l.split("\t")); } catch {}
-  $("history-label").hidden = !rows.length;
-  $("history").innerHTML = "";
-  for (const [id, title] of rows) {
+  box.innerHTML = "";
+  const groups = new Map();
+  for (const r of rows) { const k = r[1] ? r[0] : ""; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  const loose = groups.get("") || []; groups.delete("");
+  const item = ([folder, , id, title]) => {
     const b = document.createElement("button");
     b.className = "btn btn--ghost"; b.type = "button"; b.title = title;
     if (id === conversationId) b.setAttribute("aria-current", "page");
     b.innerHTML = '<span class="side__text"></span>'; b.firstChild.textContent = title;
-    b.addEventListener("click", () => openConversation(id));
-    $("history").append(b);
+    b.addEventListener("click", () => openConversation(folder, id));
+    return b;
+  };
+  for (const [folder, list] of groups) {
+    const name = list[0][1], head = document.createElement("div");
+    head.className = "side__row";
+    head.innerHTML = '<h2 class="side__label side__text"></h2><button class="btn btn--ghost btn--icon btn--sm side__more" type="button"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-plus"/></svg></button>';
+    const label = head.firstChild, plus = head.lastChild;
+    label.textContent = name; label.title = "Rename"; label.tabIndex = 0;
+    plus.setAttribute("aria-label", `New conversation in ${name}`); plus.title = `New conversation in ${name}`;
+    plus.addEventListener("click", () => { try { sessionStorage.setItem("laweditor.game", JSON.stringify({ folder, name })); } catch {} fresh(); });
+    label.addEventListener("click", () => rename(label, folder, name));
+    label.addEventListener("keydown", (e) => { if (e.key === "Enter") rename(label, folder, name); });
+    box.append(head, ...list.map(item));
+  }
+  if (loose.length) {
+    const h = document.createElement("h2"); h.className = "side__label side__text"; h.textContent = "Conversations";
+    box.append(h, ...loose.map(item));
   }
 }
-async function openConversation(id) {
-  if (id === conversationId || turnId || waiting) return;
+// Renaming a game: its name turns into a field; Enter keeps the new name, Escape the old one.
+function rename(label, folder, name) {
+  const f = document.createElement("input");
+  f.className = "input input--sm"; f.value = name; f.setAttribute("aria-label", "Name of the game");
+  label.replaceWith(f); f.focus(); f.select();
+  const done = async (keep) => {
+    const n = f.value.trim();
+    if (keep && n && n !== name) {
+      await post(`/api/rename/${encodeURIComponent(folder)}`, n);
+      if (folder === convFolder) { convGame = n; game.lock(convFolder, n); }
+      game.reload();
+    }
+    listConversations();
+  };
+  f.addEventListener("keydown", (e) => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+  f.addEventListener("blur", () => done(true));
+}
+async function openConversation(folder, id) {
+  if (id === conversationId) { document.querySelector('#side [data-view="chat"]').click(); return; }   // back to it from Laws
+  if (turnId || waiting) return;
+  await post(`/api/project/${encodeURIComponent(folder)}`, "");   // the chat works in its folder again
   let text = ""; try { text = await (await fetch(`/api/conversation/${id}`)).text(); } catch { return; }
   await leaveStart();
   document.querySelector('#side [data-view="chat"]').click();
   conversationId = id; said.length = 0; $("chat").innerHTML = "";
-  for (const line of text.split("\n").slice(1)) {
+  const [talk, turns = ""] = text.split(TURNS), ids = turns.split(",");
+  for (const line of talk.split("\n").slice(1)) {
     const m = line.match(/^(Person|Agent): (.*)$/);
     if (m) said.push({ who: m[1] === "Person" ? C.person() : C.agent(), text: m[2] });
     else if (said.length) said[said.length - 1].text += "\n" + line;
   }
+  said.forEach((m, i) => { if (ids[i]) m.turn = ids[i]; });
   let last = null;
-  for (const m of said) if (m.who === C.person()) messages.mine(m.text); else last = messages.past(shown(m.text));
+  for (const m of said) {
+    if (m.who === C.person()) { messages.mine(m.text); continue; }
+    last = messages.theirs();
+    if (m.turn) try { context(last.work(await (await fetch(`/api/work/${m.turn}`)).text(), m.turn)); } catch {}
+    last.restore(shown(m.text));
+  }
   if (last) face.to(last.slot);
+  const row = (await (await fetch("/api/conversations")).text()).split("\n").map((l) => l.split("\t")).find((r) => r[2] === id) || [];
+  convFolder = folder; convGame = row[1] || ""; game.lock(folder, convGame);
   listConversations();
 }
+
 listConversations();
+// A conversation with no game becomes one once it has a sentence or a file: named by the chat (GAME:),
+// or by its first message if the chat gave no name.
+async function promote(answer = "") {
+  if (convGame) return;
+  const name = C.game_name(answer) || (said.find((m) => m.who === C.person())?.text || "Game").split("\n")[0].slice(0, 40);
+  if ((await post("/api/promote", name)).includes("promoted")) { convGame = name; game.lock(convFolder, name); game.reload(); listConversations(); }
+}
+
+// A new conversation from the + of a game starts in that game.
+try { const g = JSON.parse(sessionStorage.getItem("laweditor.game") || "null"); sessionStorage.removeItem("laweditor.game"); if (g) game.choose(g.folder, g.name); } catch {}
+// New conversation: the chat view (the page remembers the last view), then a fresh page.
+const fresh = () => { document.querySelector('#side [data-view="chat"]').click(); location.reload(); };
+$("new-conversation").addEventListener("click", fresh);
+
 // One turn of the agent; if it stops with an error, a card says why and Try again runs the turn again.
 async function reply(from) {
   const first = messages.theirs();
   face.to(first.slot, from ?? undefined); face.lookAt(first.el);
   stopped = false;
-  const { reply: r, answer, failed: broke } = await ask(first);
+  const { reply: r, answer, failed: broke, turn } = await ask(first);
   if (stopped) { r.stop(); face.lookAt(null); messages.failed("You stopped the reply.", () => reply()); return; }
   if (broke) { r.stop(); face.lookAt(null); messages.failed(answer, () => reply()); return; }
   const reply_ = r;
-  said.push({ who: C.agent(), text: answer });
+  said.push({ who: C.agent(), text: answer, turn });
   await reply_.write(shown(answer));
   face.lookAt(null);
+  await promote(answer);
   saveConversation();
   hear(answer);    // the laws it heard, one card at a time
   offer(answer);   // then, if it offers one, the mode
@@ -259,6 +340,7 @@ function hear(answer) {
       const { state, out } = await new Promise((done) =>
         document.dispatchEvent(new CustomEvent("laweditor:add", { detail: { sentence, done } })));
       card.set(DOT[state], out);
+      promote();   // an accepted sentence can make this conversation a game
     });
   });
 }
