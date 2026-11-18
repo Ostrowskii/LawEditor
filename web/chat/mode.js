@@ -55,6 +55,9 @@ export function createMode(dd, aiDd, firstAi, allowedAt) {
     return r;
   }
   function drawAllowed() {
+    try { drawList(); } catch (e) { console.error("The allowed list could not be drawn:", e); }   // the mode still works
+  }
+  function drawList() {
     const n = Number(G.allowed_count(text)), on = n > 0 && !!P.mode_asks_at(mode);
     tag.hidden = !on; section.hidden = !on;
     menu.classList.toggle("menu--wide", on);

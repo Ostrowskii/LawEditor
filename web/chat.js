@@ -20,7 +20,7 @@ import { createStart } from "./chat/start.js";
 import { createPlace } from "./chat/place.js";
 import { createList } from "./chat/list.js";
 import { markdown } from "./markdown.js";
-import { where, key, project, conversation, go, fresh, get, post, sleep } from "./where.js";
+import { where, key, project, conversation, go, fresh, get, post, sleep, fields, inParts } from "./where.js";
 
 const $ = (id) => document.getElementById(id);
 const page = document.querySelector(".page");
@@ -39,14 +39,15 @@ const chatMode = createMode($("mode"), aiDd, models.get().ai, () => conversation
 const place = createPlace($("place"), $("place-name"));
 
 // What the person reads: the reply without its LAW:, MODE:, PLAN: and GAME: lines (each module hides its own).
-const shown = (text) => O.words(H.words(A.plan_words(C.game_words(text))));
+const shown = (text) => inParts((part) => O.words(H.words(A.plan_words(C.game_words(part)))), text);
 // The AI, its model and the mode, as the server reads them at the head of what is sent.
 const settings = () => { const { ai, model } = models.get(); return `${ai}\t${model}\t${chatMode.get()}`; };
 
 // ---------- The conversation on the page ----------
-// log: the events read so far, as the server keeps them. What may be done now is read from it by
-// EVENTS.bend (running, asking), the same functions the server uses.
-let log = "", seen = 0, reader = 0, started = false;
+// seen: how many of the conversation's events were read and drawn. What goes on now (a turn runs, a question
+// waits, the game's name) is asked to the server, which reads it from the conversation with EVENTS.bend.
+let seen = 0, reader = 0, started = false;
+let now = { running: "", asking: "", game: "" };
 let reply = null, turn = "", streamed = "";       // the reply being drawn, its turn, its text so far
 let drawn = 0;                                    // the turn's actions already drawn above a question's card
 const cards = new Map();                          // question -> its card
@@ -59,7 +60,14 @@ function context(percent) {
   meter.querySelector(".meter__bar > span").style.width = Math.min(100, percent) + "%";
   meter.querySelector(".meter__value").textContent = percent + "%";
 }
-function sync() { composer.set(!!Ev.running(log), !!Ev.asking(log)); }
+async function sync() {
+  const me = reader;
+  let text = ""; try { text = await get(conversation("now")); } catch {}
+  if (me !== reader) return;
+  const [running = "", asking = "", game = ""] = text.replace(/\n$/, "").split("\t");
+  now = { running, asking, game };
+  composer.set(!!running, !!asking);
+}
 
 function newReply() {
   reply = messages.theirs(drawn);
@@ -98,7 +106,8 @@ function question(q, text, open) {
 // One event. old: it is read from a conversation opened again (no motion, nothing waits).
 // later: the events that come after it in the same reading.
 async function draw(line, old, later) {
-  const kind = Ev.kind(line), f = (n) => Ev.field(line, n);
+  const parts = fields(line), kind = parts[0], f = (n) => parts[n + 1] || "";
+  const kindIs = (k) => (l) => l.startsWith(k + "\t");
   if (kind === "me") { if (mineShown > 0) mineShown--; else messages.mine(f(0), [], old); }
   if (kind === "turn") { turn = f(0); streamed = ""; drawn = 0; newReply(); }
   if (kind === "reply") {
@@ -109,9 +118,9 @@ async function draw(line, old, later) {
   }
   if (kind === "fail" || kind === "stopped") {
     reply?.stop(); reply = null; turn = ""; face.lookAt(null);
-    if (!later.some((l) => Ev.kind(l) === "turn")) messages.failed(kind === "fail" ? f(1) : "You stopped the reply.", again);
+    if (!later.some(kindIs("turn"))) messages.failed(kind === "fail" ? f(1) : "You stopped the reply.", again);
   }
-  if (kind === "ask") question(f(0), f(1), !later.some((l) => Ev.kind(l) === "answer" && Ev.field(l, 0) === f(0)));
+  if (kind === "ask") question(f(0), f(1), !later.some((l) => kindIs("answer")(l) && fields(l)[1] === f(0)));
   if (kind === "answer") {
     const q = f(0), k = kindOf(q);
     cards.get(q)?.answered();
@@ -133,11 +142,11 @@ async function read(old = false) {
   if (me !== reader) return;
   const lines = text.split("\n").filter(Boolean);
   for (const [i, line] of lines.entries()) {
-    log += line + "\n"; seen++;
-    await draw(line, old, lines.slice(i + 1));
+    seen++;
+    try { await draw(line, old, lines.slice(i + 1)); } catch (e) { console.error("An event could not be drawn:", e); }   // one event never stops the reading
     if (me !== reader) return;
   }
-  if (lines.length) { sync(); if (!old) list.refresh(); }
+  if (lines.length) { await sync(); if (!old) list.refresh(); }
 }
 // While the chat answers: its work so far (ASK.bend reads the turn's file), and its words as it writes them.
 async function watch() {
@@ -153,7 +162,7 @@ async function follow() {
     await read();
     if (me !== reader) return;
     await watch();
-    await sleep(Ev.can_say(log) ? 1200 : 300);
+    await sleep(now.running || now.asking ? 300 : 1200);
   }
 }
 
@@ -185,7 +194,7 @@ const composer = createComposer($("composer"), {
       await read(); sync(); list.refresh(); return;
     }
     messages.mine(text, files); mineShown++;
-    const r = await post(conversation("say"), settings() + "\n" + C.with_files(text, files.join(", ")));
+    const r = await post(conversation("say"), settings() + "\n" + text + C.with_files("", files.join(", ")));   // CHAT.bend writes what comes after the text
     if (!r.startsWith("ok")) { mineShown--; messages.failed(r === "busy" ? "The chat is still answering, or a question waits above." : "The LawEditor server isn't running, or this project isn't there anymore.", again); sync(); return; }
     list.refresh();
   },
@@ -199,7 +208,7 @@ function command(name) {
 }
 
 function reset() {
-  reader++; log = ""; seen = 0; reply = null; turn = ""; streamed = ""; mineShown = 0; drawn = 0;
+  reader++; seen = 0; now = { running: "", asking: "", game: "" }; reply = null; turn = ""; streamed = ""; mineShown = 0; drawn = 0;
   cards.clear(); messages.clear(); meter.hidden = true;
 }
 const toChat = () => document.querySelector('#side [data-view="chat"]').click();
@@ -218,9 +227,8 @@ async function openConversation(k, id) {
   reset(); go(k, id);
   await leaveStart(); toChat();
   await read(true);
-  const game = Ev.game(log);
-  place.lock(game || (rows.get(id) || ""));
-  sync(); list.refresh(); follow();
+  place.lock(now.game || (rows.get(id) || ""));
+  list.refresh(); follow();
 }
 
 // The side bar's list. A conversation that got its game (its folder was named) is followed there.

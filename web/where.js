@@ -27,6 +27,28 @@ export async function post(path, body = "") {
   catch { return ""; }
 }
 
+// One event's parts, as harness/EVENTS.bend writes them: its kind, then its fields, split by tabs; inside a
+// field \t, \n and \\ stand for a tab, a new line and a backslash.
+// Read here and not by EVENTS.bend's own functions: in a browser a Bend function that walks a text letter by
+// letter runs out of room after a few thousand, and one event can hold a whole file (a permission question).
+export const fields = (line) => line.split("\t").map((s) => s.replace(/\\([\s\S])/g, (m, c) => (c === "n" ? "\n" : c === "t" ? "\t" : c)));
+// A Bend function that drops whole lines of a text (the reply's LAW:, PLAN:, GAME: lines), run on a text of
+// any length: in parts of a few lines each, for the same reason. A part ends at a line's end; a single line
+// longer than a part goes through as it is.
+const PART = 1500;
+export function inParts(fn, text) {
+  if (text.length <= PART) return fn(text);
+  const out = []; let part = [], size = 0;
+  const flush = () => { if (part.length) { out.push(fn(part.join("\n"))); part = []; size = 0; } };
+  for (const line of text.split("\n")) {
+    if (line.length > PART) { flush(); out.push(line); continue; }
+    if (size + line.length > PART) flush();
+    part.push(line); size += line.length + 1;
+  }
+  flush();
+  return out.join("\n");
+}
+
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const lessMotion = matchMedia("(prefers-reduced-motion: reduce)");

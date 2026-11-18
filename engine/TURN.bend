@@ -556,6 +556,15 @@ def events(+dir: String, +conv: String, n: Nat) -> IO(String):
     log : String <- Sys.read_file(Places.log(dir, conv))
     return Ev.after(log, n)
 
+# GET /api/c/<key>/<conversation>/now: what goes on, read from the conversation by EVENTS.bend: the turn
+# that runs, the question that waits and the game's name, split by tabs (each empty when there is none).
+# A window asks this instead of reading the whole conversation itself: the answer is short however long
+# the conversation got.
+def now(+dir: String, +conv: String) -> IO(String):
+  do IO<String>:
+    +log : String <- Sys.read_file(Places.log(dir, conv))
+    return Ev.running(log) ++ SCon{Ev.tab(), Ev.asking(log) ++ SCon{Ev.tab(), Ev.game(log)}}
+
 # POST /api/c/<key>/<conversation>/answer/<question>, body: the answer's word. The engine, which waits,
 # reads it and writes the event.
 def answer(+dir: String, +conv: String, +q: String, word: String) -> IO(String):
