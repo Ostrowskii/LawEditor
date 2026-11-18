@@ -128,6 +128,12 @@ def asking_args(+w: Talk, +turn: String, prompt: String) -> List<String>:
     ["--permission-prompts", "host", "--permission-prompt-tool", "mcp__laweditor__approve", "--mcp-config", mcp_config(w, turn),
      "--output-format", "stream-json", "--verbose", "--include-partial-messages"])))
 
+# How long Claude waits for the interphone's answer, in ms: a week. Left to itself it gives up after about
+# a minute ("The operation timed out"), tries the action again and asks again, and nothing gets written
+# for a person who takes their time to read what would change.
+def patience() -> String:
+  "MCP_TOOL_TIMEOUT=604800000"
+
 # Codex answers all at once; Claude writes its answer to the turn's file as it goes, and a turn that asks
 # has no time limit: while the person hasn't answered, Claude waits, and so does this.
 def run_ai.at(codex: Bool, asks: Bool, +w: Talk, +turn: String, prompt: String) -> IO(U32 & String):
@@ -135,7 +141,7 @@ def run_ai.at(codex: Bool, asks: Bool, +w: Talk, +turn: String, prompt: String) 
     case True{} _:
       Sys.run_in(dir(w), "codex", codex_args(model(w), prompt), 600000)
     case False{} True{}:
-      Sys.run_to(dir(w), Places.turn(dir(w), turn), "claude", asking_args(w, turn, prompt), 4294967295)
+      Sys.run_to(dir(w), Places.turn(dir(w), turn), "env", patience() <> "claude" <> asking_args(w, turn, prompt), 4294967295)
     case False{} False{}:
       Sys.run_to(dir(w), Places.turn(dir(w), turn), "claude", claude_args(model(w), prompt), 600000)
 
