@@ -1,6 +1,6 @@
 # LawEditor: the chat hears rules. Pure; the server and the page ask it.
 #
-# Two parts, like a game's AI and its rules:
+# Two parts:
 #   the skill (HEAR.md) is a prompt. It asks the chat to end its reply with one line
 #     LAW: "<sentence>"
 #   for each rule the person stated. A prompt can miss a rule or make one up.
@@ -97,9 +97,9 @@ def in_doc(+sentence: String, ls: List<&2, String>) -> Bool:
     case h <> t:
       String.eq(String.trim(h), sentence) || in_doc(sentence, t)
 
-# A proposal is new when no line of GDD.md already says it. Old ones are not asked again.
-def is_new(+sentence: String, gdd: String) -> Bool:
-  Bool.not(in_doc(String.trim(sentence), String.lines(gdd)))
+# A proposal is new when no line of RULES.md already says it. Old ones are not asked again.
+def is_new(+sentence: String, rules: String) -> Bool:
+  Bool.not(in_doc(String.trim(sentence), String.lines(rules)))
 
 # ---------- The person's answer ----------
 

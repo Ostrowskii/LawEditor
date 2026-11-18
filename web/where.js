@@ -1,6 +1,6 @@
 // Where the page is: the conversation that is open, and its project. Every request names them, so the
 // server never has to remember which project is "current" (engine/PLACES.bend).
-// A conversation with no game yet has no project of its own name: it names itself (its key is its own name).
+// A conversation with no project yet names itself as one (its key is its own name).
 const newId = () => "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const where = { key: "", conv: newId() };
 
@@ -32,7 +32,7 @@ export async function post(path, body = "") {
 // Read here and not by EVENTS.bend's own functions: in a browser a Bend function that walks a text letter by
 // letter runs out of room after a few thousand, and one event can hold a whole file (a permission question).
 export const fields = (line) => line.split("\t").map((s) => s.replace(/\\([\s\S])/g, (m, c) => (c === "n" ? "\n" : c === "t" ? "\t" : c)));
-// A Bend function that drops whole lines of a text (the reply's LAW:, PLAN:, GAME: lines), run on a text of
+// A Bend function that drops whole lines of a text (the reply's LAW:, PLAN:, PROJECT: lines), run on a text of
 // any length: in parts of a few lines each, for the same reason. A part ends at a line's end; a single line
 // longer than a part goes through as it is.
 const PART = 1500;

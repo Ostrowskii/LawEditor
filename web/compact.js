@@ -1,5 +1,5 @@
 // The compact view: the chat and the terminal, and little else. The side bar and the toolbar step aside
-// for a thin line of state (Bend-UI's strip): the conversation's game, how many conversations work and
+// for a thin line of state (Bend-UI's strip): the conversation's project, how many conversations work and
 // how many wait for the person (a click opens the first of them), and the way back to the full app.
 import { setPane } from "bend-ui/panes";
 import { setSide } from "bend-ui";

@@ -81,74 +81,76 @@ def slug.or(+s: String, empty: Bool) -> String:
 def slug(+name: String) -> String:
   slug.or(slug.go(String.to_lower(String.trim(name))), String.eq(String.trim(name), ""))
 
-# ---------- A conversation's game ----------
-# A conversation starts with no game. The chat names the game once, on a line of its own, when it starts
-# building or hears the first rule: GAME: "Rio Negro" (CHAT.md teaches it). The page hides the line.
+# ---------- A conversation's project ----------
+# A conversation starts with no project. The chat names it once, on a line of its own, when it starts
+# building or hears the first rule: PROJECT: "Rio Negro" (CHAT.md teaches it). The page hides the line.
 
-def is_game_line(+line: String) -> Bool:
-  String.starts_with(String.trim(line), "GAME:")
+def project_mark() -> String: "PROJECT:"
 
-def game.drop_quote(quote: Bool, +c: Char, rest: String) -> String:
+def is_project_line(+line: String) -> Bool:
+  String.starts_with(String.trim(line), project_mark())
+
+def project.drop_quote(quote: Bool, +c: Char, rest: String) -> String:
   match quote:
     case True{}:
       rest
     case False{}:
       SCon{c, rest}
 
-def game.unquote(s: String) -> String:
+def project.unquote(s: String) -> String:
   match s:
     case SNil{}:
       ""
     case SCon{+h, t}:
-      game.drop_quote(Char.is_eq(h, '"'), h, game.unquote(t))
+      project.drop_quote(Char.is_eq(h, '"'), h, project.unquote(t))
 
-def game.name_of(+line: String) -> String:
-  String.trim(game.unquote(String.drop(String.trim(line), 5n)))
+def project.name_of(+line: String) -> String:
+  String.trim(project.unquote(String.drop(String.trim(line), String.length(project_mark()))))
 
-def game.pick(game: Bool, +line: String, +rest: String) -> String:
-  match game:
+def project.pick(named: Bool, +line: String, +rest: String) -> String:
+  match named:
     case True{}:
-      game.name_of(line)
+      project.name_of(line)
     case False{}:
       rest
 
-def game.first(ls: List<&2, String>) -> String:
+def project.first(ls: List<&2, String>) -> String:
   match ls:
     case Nil{}:
       ""
     case +h <> t:
-      game.pick(is_game_line(h), h, game.first(t))
+      project.pick(is_project_line(h), h, project.first(t))
 
-# The name the chat gave the game in a reply ("" if it gave none).
-def game_name(+reply: String) -> String:
-  game.first(String.lines(reply))
+# The name the chat gave the project in a reply ("" if it gave none).
+def project_name(+reply: String) -> String:
+  project.first(String.lines(reply))
 
-def game_words.keep(game: Bool, +line: String, rest: List<&2, String>) -> List<&2, String>:
-  match game:
+def project_words.keep(named: Bool, +line: String, rest: List<&2, String>) -> List<&2, String>:
+  match named:
     case True{}:
       rest
     case False{}:
       line <> rest
 
-def game_words.go(ls: List<&2, String>) -> List<&2, String>:
+def project_words.go(ls: List<&2, String>) -> List<&2, String>:
   match ls:
     case Nil{}:
       Nil{}
     case +h <> t:
-      game_words.keep(is_game_line(h), h, game_words.go(t))
+      project_words.keep(is_project_line(h), h, project_words.go(t))
 
-# What the person reads: the reply without its GAME: line.
-def game_words(reply: String) -> String:
-  String.trim(String.join(game_words.go(String.lines(reply)), "\n"))
+# What the person reads: the reply without its PROJECT: line.
+def project_words(reply: String) -> String:
+  String.trim(String.join(project_words.go(String.lines(reply)), "\n"))
 
-# The conversation as the chat reads it: with a game, a line that names it comes first (CHAT.md: the chat
-# doesn't name it again).
-def with_game.of(conversation: String, game: String, none: Bool) -> String:
+# The conversation as the chat reads it: with a project, a line that names it comes first (CHAT.md: the
+# chat doesn't name it again).
+def with_project.of(conversation: String, name: String, none: Bool) -> String:
   match none:
     case True{}:
       conversation
     case False{}:
-      "Game: \"" ++ game ++ "\"\n\n" ++ conversation
+      "Project: \"" ++ name ++ "\"\n\n" ++ conversation
 
-def with_game(conversation: String, +game: String) -> String:
-  with_game.of(conversation, game, String.eq(game, ""))
+def with_project(conversation: String, +name: String) -> String:
+  with_project.of(conversation, name, String.eq(name, ""))

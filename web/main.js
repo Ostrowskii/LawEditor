@@ -23,7 +23,7 @@ async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", body });
   return { ok: res.ok, status: res.status, text: await res.text() };
 }
-// The project's files (GDD.md, TYPES.bend, LAWS.bend): the open conversation's project, asked by name each
+// The project's rules and laws (RULES.md, LAWS.bend): the open conversation's project, asked by name each
 // time (web/where.js), so what is read and written is never another project's.
 const readFile = async (name) => { try { return (await api(project("file/" + name))).text; } catch { return ""; } };
 const writeFile = (name, text) => api(project("file/" + name), text).catch(() => {});
@@ -157,7 +157,7 @@ $("kind").addEventListener("pick", (e) => {
   syncSize(); save();
 });
 
-// GDD.md: one line per block; "# " marks a title. It is saved a moment after the last key, to the project
+// RULES.md: one line per block; "# " marks a title. It is saved a moment after the last key, to the project
 // the document was read from (saveTo): if the page moves to another conversation first, it is saved at once.
 let saveT = null, saveTo = "";
 function saveNow() {
@@ -169,7 +169,7 @@ function saveNow() {
 }
 function save() {
   clearTimeout(saveT);
-  saveTo = project("file/GDD.md");
+  saveTo = project("file/RULES.md");
   saveT = setTimeout(saveNow, 400);
 }
 
@@ -303,9 +303,9 @@ function swap(to) {
 // =========================================================
 // Laws view: what the agent wrote. Read only; hold the lock to edit.
 // =========================================================
-let typesSrc = "", lawsSrc = "";
+let lawsSrc = "";
 async function loadLaws() {
-  [lawsSrc, typesSrc] = await Promise.all([readFile("LAWS.bend"), readFile("TYPES.bend")]);
+  lawsSrc = await readFile("LAWS.bend");
   laws = parseLaws(lawsSrc);
   renderLaws();
 }
@@ -322,8 +322,6 @@ function renderLaws() {
     b.querySelector(".block__out").textContent = l.code.split("\n").slice(1).join("\n");
     list.append(b);
   }
-  $("types-code").textContent = typesSrc.trim() || "import Base";
-  highlight($("types-code").parentElement);
 }
 
 // Hold to edit: the ring fills in amber; let go early and nothing happens.
@@ -339,13 +337,12 @@ unlock.addEventListener("pointerdown", () => {
 function editLaws(on) {
   $("laws-read").hidden = on; $("laws-edit").hidden = !on;
   $("laws-note").textContent = on ? "Editing. Laws you change here are yours: the agent never rewrites them." : "Hold the lock to edit.";
-  if (on) { $("laws-src").value = lawsSrc; $("types-src").value = typesSrc; }
+  if (on) $("laws-src").value = lawsSrc;
   else delete unlock.dataset.status;
 }
 $("edit-cancel").addEventListener("click", () => editLaws(false));
 $("edit-save").addEventListener("click", async () => {
   await writeFile("LAWS.bend", $("laws-src").value);
-  await writeFile("TYPES.bend", $("types-src").value);
   editLaws(false);
   await loadLaws();
   refreshDocStates();
@@ -379,7 +376,8 @@ side.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", 
 }));
 
 // Laws shows the document (its selector: sentences, with laws, or split), or, from their own buttons,
-// its files (LAWS.bend, TYPES.bend) or its context (AGENT.md, what the law agent is told).
+// its laws as they are written (LAWS.bend) or its context (AGENT.md, what the law agent is told). The
+// code the laws talk about is the project's own: it shows in the files pane, beside the chat.
 // show: false only remembers it (Chat is open).
 const VIEW_CLASS = { sentences: [], laws: ["doc--stack"], split: ["doc--split", "doc--wide"] };
 const VIEW_SECTION = { sentences: "doc", laws: "doc", split: "doc", files: "laws", context: "context" };
@@ -418,13 +416,13 @@ let loading = 0;
 async function loadDoc() {
   if (running || saveT !== null) return;
   const me = ++loading;
-  const gdd = await readFile("GDD.md");
+  const rules = await readFile("RULES.md");
   await loadLaws();
   if (me !== loading || running || saveT !== null) return;
   const had = document.activeElement?.closest?.("#doc");
   doc.querySelectorAll(".pair").forEach((x) => x.remove());
   current = null;
-  for (const line of gdd.split("\n").filter((l) => l.trim())) {
+  for (const line of rules.split("\n").filter((l) => l.trim())) {
     const title = line.startsWith("# ");
     const text = title ? line.slice(2) : line;
     const b = makeBlock(title ? "title" : "text", text);

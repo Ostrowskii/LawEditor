@@ -51,7 +51,7 @@ def jstr(+s: String) -> String:
 def field(+s: String, key: String) -> String:
   jstr(after(s, "\"" ++ key ++ "\":\""))
 
-# The last piece of a path: "/a/b/GDD.md" is "GDD.md".
+# The last piece of a path: "/a/b/RULES.md" is "RULES.md".
 def base_name.of(m: Maybe<&2, String>, path: String) -> String:
   match m:
     case None{}:
@@ -492,9 +492,9 @@ def actions(xs: List<&2, String>, +rs: List<&2, String>, +fs: List<&2, String>, 
       action_line(h, nth_or(rs, i), failed_at(fs, i)) ++ actions(t, rs, fs, (i + 1 : U32))
 
 # The plan: the chat writes its steps in its text, one per line, and writes them again as they change:
-#   PLAN: [x] Make the map        done
-#   PLAN: [>] Put the player on it  now
-#   PLAN: [ ] Enemies             next
+#   PLAN: [x] Write the counter in main.bend   done
+#   PLAN: [>] Draw it in a page                now
+#   PLAN: [ ] Keep the count between visits    next
 # A step's last line wins; the steps keep the order they first came in. CHAT.md teaches it.
 def text_of_turn.each(xs: List<&2, String>) -> String:
   match xs:
@@ -749,6 +749,18 @@ def context_of(+out: String) -> String:
 
 def work(+out: String) -> String:
   actions(tools_of(out), results_of(out), fails_of(out), 0) ++ plan_of(out) ++ changes.lines(changes.go(tools_of(out), fails_of(out), 0, [])) ++ changes.title(changes.count(changes.go(tools_of(out), fails_of(out), 0, []), 0)) ++ now.of(now.last(tools_of(out), "")) ++ context_of(out)
+
+# Did the turn act on the project? An edit, a new file or a command that ran (a refused one didn't).
+# engine/BUILD.bend asks: only then does Bend check the project again.
+def acted.go(xs: List<&2, String>, +fs: List<&2, String>, +i: U32) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case +h <> t:
+      (((is_file_tool(tool_name(h)) || String.eq(tool_name(h), "Bash")) && Bool.not(failed_at(fs, i))) || acted.go(t, fs, (i + 1 : U32)))
+
+def acted(+out: String) -> Bool:
+  acted.go(tools_of(out), fails_of(out), 0)
 
 # A number written in text ("12" is 12; "" is 0).
 def to_u32(+s: String) -> U32:

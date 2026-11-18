@@ -3,8 +3,11 @@
 // rows of two columns (a mark, the text), so every line of text of a turn starts at the same place.
 // While the agent works, its part of the turn shows what ASK.bend reads from the turn's file (the server's
 // work/<turn>): its plan, its actions, what it does now. When it ends, that work folds into one line.
+// After a reply that changed the project, the turn says what Bend answered: its check of the .bend files,
+// and the page it bundled, with a button that opens it (engine/BUILD.bend).
 // at: the open conversation's things: at.output(turn, n) (where an action's output is asked for),
-// at.openFolder(), at.openFile(path) and at.changed(files) (a reply changed these files).
+// at.openFolder(), at.openFile(path), at.changed(files) (a reply changed these files), at.tag(file) (what
+// is said of a file that isn't Bend, or "") and at.openPage() (what opens the project's page, or null).
 import { markdown } from "../markdown.js";
 import { codeBlock, highlight } from "bend-ui/syntax";
 import { lessMotion, sleep, get, esc, icon } from "../where.js";
@@ -118,7 +121,8 @@ export function createMessages(list, page, at) {
         const end = row('<span class="dot dot--success"></span>', `<div class="turn__line turn__line--wrap"><span class="turn__strong">${esc(head)}</span><button class="link link--icon turn__end" type="button">${icon("folder", true)}<span>Open folder</span></button></div>`, "turn__row--sm");
         const folder = end.querySelector(".turn__end");
         for (const [, file, add, del] of changes.slice(0, 3)) {
-          const f = el(`<button class="link link--icon turn__file" type="button"><span class="mono">${esc(file)}</span>${Number(add) ? `<span class="changes__add">+${add}</span>` : ""}${Number(del) ? `<span class="changes__del">−${del}</span>` : ""}</button>`);
+          const tag = at.tag(file);   // a file that isn't Bend: no law checks it
+          const f = el(`<button class="link link--icon turn__file" type="button"><span class="mono">${esc(file)}</span>${Number(add) ? `<span class="changes__add">+${add}</span>` : ""}${Number(del) ? `<span class="changes__del">−${del}</span>` : ""}${tag ? `<span class="tag">${esc(tag)}</span>` : ""}</button>`);
           f.addEventListener("click", () => at.openFile(file)); folder.before(f);
         }
         if (changes.length > 3) folder.before(el(`<span class="tool__meta">and ${changes.length - 3} more</span>`));
@@ -192,9 +196,31 @@ export function createMessages(list, page, at) {
       };
       return { answered: (said, ok) => show(said, ok), set: (state, note) => show(note.replace(/\.$/, ""), state === "ok") };
     }
+    // ---------- What Bend said of the project, after a reply changed it ----------
+    // The check. ok: the files checked, then how many claims wait for a proof. error: the file, then
+    // what Bend said, as it said it.
+    function checked(state, text) {
+      const [first = "", ...rest] = text.split("\n");
+      if (state === "ok") {
+        const open = Number(rest[0]) || 0;
+        return put(row('<span class="dot dot--success"></span>', line("Bend checked", first, { mono: true, meta: open ? `no errors · ${open} without a proof` : "no errors" }), "turn__row--sm"));
+      }
+      put(row('<span class="dot dot--danger"></span>', `${line("Bend found an error in", first, { mono: true, tone: "warning" })}<pre class="turn__out turn__out--error">${esc(rest.join("\n"))}</pre>`, "turn__row--sm"));
+    }
+    // The page. ok: its file. warn: why it is not as it should be (it imports no Bend). error: the file,
+    // then what Bend said. A page that was bundled opens in a tab of its own.
+    function bundled(state, text) {
+      const [first = "", ...rest] = text.split("\n"), open = state === "error" ? null : at.openPage();
+      const button = open ? `<button class="link link--icon turn__end" type="button">${icon("external-link", true)}<span>Open the page</span></button>` : "";
+      const main = state === "ok" ? `<div class="turn__line turn__line--wrap"><span class="tool__kind">Bend bundled</span><span class="tool__what mono">${esc(first)}</span>${button}</div>`
+        : state === "warn" ? `<div class="turn__line turn__line--wrap"><span class="turn__text">${esc(text)}</span>${button}</div>`
+        : `${line("Bend could not bundle", first, { mono: true, tone: "warning" })}<pre class="turn__out turn__out--error">${esc(rest.join("\n"))}</pre>`;
+      const r = put(row(`<span class="dot ${state === "ok" ? "dot--success" : state === "warn" ? "dot--warning" : "dot--danger"}"></span>`, main, "turn__row--sm"));
+      if (open) r.querySelector(".turn__end").addEventListener("click", open);
+    }
     // The reply stopped or failed: the turn says why, after what it had done.
     const fail = (why, again) => put(failure(why, again, (r) => r.remove()));
-    return { el: m, slot: m.firstChild.firstChild, reply, rule, record, fail };
+    return { el: m, slot: m.firstChild.firstChild, reply, rule, record, checked, bundled, fail };
   }
 
   // Why something couldn't be done, and Try again when there is something to try (gone: what to take away then).

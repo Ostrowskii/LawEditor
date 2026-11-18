@@ -1,3 +1,33 @@
+# Next: after the Bend pipeline (0.1.12)
+
+Written on 2026-11-18, with 0.1.12. LawEditor is a harness for Bend: what it builds is Bend, built by Bend's own pipeline. What is still to decide or build.
+
+## Laws to propose (none is in `LAWS.bend`: they need the owner's yes)
+
+What 0.1.12 does is in Bend (`harness/POLICY.bend`, `engine/BUILD.bend`), but no law says it yet:
+
+- **A `.bend` file is logic, and only logic is checked.** `P.layer_of("bend") == Logic`, and `P.layer_checked` is true for logic alone.
+- **A file that isn't logic is never passed in silence.** `P.layer_note` is empty only for logic: the question before such a file is written always says no law checks it.
+- **A turn that changed the project is checked by Bend before the person is asked anything else.** The order in `engine/TURN.bend` (`replied`): the reply, the check, then the laws heard.
+- **A page is never served from the app's own address.** `server.bend`: the pages door.
+
+## A law is only a claim until it is proved
+
+Since 0.1.12 a law talks about the project's real code: it stops compiling when the definition it names goes away or changes its shape. But a law that compiles is an open claim (Bend counts it as a TODO), so code that changes what a definition *does* still breaks no law. Seen with Bend 2.0.40: a claim with no `for` is proved by `{==}`, and then a wrong value turns it red ("expected 2, observed 3"). The step after this one:
+
+- The law agent writes the proof when the claim is settled by running it (`{==}`), in a `PROOF.bend` of the project, and the engine's check runs `bend PROOF.bend`.
+- A law with `for` needs a real proof (cases, induction). A model can try; when it fails, the person must be told whether the law is false for this code or only not proved yet. That difference is the hard part.
+- The check's line already counts them ("2 without a proof").
+
+## What a project is made of: still open
+
+- **Which files are glue is a list of endings** (`POLICY.glue_kinds`). A `.js` file is glue, and nothing but the chat's instructions keeps logic out of it. The one thing the system sees today: a page that imports no `.bend` file at all. A finer test (how much of a page is not drawing) is an idea, not a plan.
+- **A program in another language is asked, not refused.** In Ask before changes every file is asked anyway; the question only says more. If it should be refused in some mode, that is a new rule in `GATE.rules()`.
+- **The chat can't run `bend` without asking.** It reads the guide from `.laweditor/GUIDE.md` and the engine checks after its reply, giving it a turn to fix an error (at most three more turns per message). Letting `bend <file> --check-only` through the gate without a question would shorten that loop: it is a change to `GATE.rules()` and to what the chat's own list allows, both the owner's.
+- **A program that opens a window** (`App.run`) only runs as a native binary, from a desktop session: the app has no button for it. The person runs `!bend main.bend` from the message box, or builds it in the terminal pane.
+- **The page is bundled into `.laweditor/page`**, LawEditor's own folder, so nothing of the person's is overwritten. `bend index.html -o dist` is still theirs to run.
+- **Old projects** made before 0.1.12 hold a `TYPES.bend` their laws import, and a `game/` folder with a lone HTML file. Their conversations open; the files are just files of the project now (`TYPES.bend` is code like any other). Nothing in the app reads those names anymore.
+
 # Next: after the engine (0.1.11)
 
 Written on 2026-11-17 and 2026-11-18, with 0.1.11. What is still to decide or build.
@@ -9,14 +39,14 @@ The engine's rules are in Bend (`harness/EVENTS.bend`, `engine/TURN.bend`), but 
 - **One question at a time in a conversation.** While a question waits, nothing else is asked and the person can't write (`EVENTS.can_say`).
 - **A message is refused while the chat answers.** `say` answers "busy"; nothing is queued silently.
 - **A conversation's events are only added to.** No event is changed or taken out; a window that has read n reads the ones after n.
-- **A conversation stays in one project.** Its game is named once; the folder's name changes, the conversation doesn't move.
-- **A draft becomes a game only with a sentence or a file.** Talking alone makes no game.
+- **A conversation stays in one project.** The project is named once; the folder's name changes, the conversation doesn't move.
+- **A draft becomes a project only with a rule or a file.** Talking alone makes no project.
 - **A command of the person's follows the mode.** Only read runs none.
 - The two from 2026-11-12 (below) are still waiting too.
 
 ## A main chat that opens others
 
-Not built. The artifact drew three options: chats side by side, led by you (built: the list with states); a main chat that leads helpers and reads their summaries (B); the chat proposes a sibling conversation with a card, and you decide (C). C fits the app (the chat proposes, the person decides) and needs only a new kind of question in `engine/TURN.bend` and a line the chat writes, like `GAME:`. B needs the questions of a helper to reach the person saying who asks: the hardest part to make trustworthy.
+Not built. The artifact drew three options: chats side by side, led by you (built: the list with states); a main chat that leads helpers and reads their summaries (B); the chat proposes a sibling conversation with a card, and you decide (C). C fits the app (the chat proposes, the person decides) and needs only a new kind of question in `engine/TURN.bend` and a line the chat writes, like `PROJECT:`. B needs the questions of a helper to reach the person saying who asks: the hardest part to make trustworthy.
 
 ## The chat's composition
 
@@ -31,7 +61,7 @@ Still to decide or do:
 
 ## Found while driving a real conversation (2026-11-18), still open
 
-- **A game with no `GAME:` line takes the start of the first message as its name** (a folder named `create-the-file-game-hello-txt-with-the`).
+- **A project with no `PROJECT:` line takes the start of the first message as its name** (a folder named `create-the-file-game-hello-txt-with-the`).
 - The i-th answer is paired with the i-th action (`ASK.bend`): actions run at the same time could be paired wrongly.
 
 The Laws view was tested with a document of 58,000 letters (702 sentences): it opens whole.
@@ -103,34 +133,3 @@ All three stop the agent, hand the whole action to the harness, and wait for all
 - **Piece 3, the card during the turn** (`GET /api/question/<turn>`, `POST /api/answer/<turn>`, the session file per conversation), 2026-11-16.
 - **Piece 4, Claude asks the gate** (`--permission-prompts host`, `--permission-prompt-tool mcp__laweditor__approve`, `--mcp-config`), 2026-11-16. Tested in the app. `--safe-mode` turns off MCP, so the chat that asks is isolated by `Policy.claude_isolation_asking()`.
 - **Found while building**: `run_to` stops Claude after 600 s (10 min), so "no time limit" needs that raised for the chat (piece 4). One question at a time per turn: two calls at once would overwrite each other's file.
-
-# Next: the game follows the laws (0.2.0)
-
-A design note, not built yet. Written on 2026-11-08 from a talk with the repo owner, to be read by people and by the tools that will help design the larger flows.
-
-## Today (0.1.5)
-
-- The person talks in the chat; the chat hears rules and proposes them; an accepted sentence goes to `GDD.md`, and the law agent writes its law in `LAWS.bend`. This works.
-- But a law checks a stand-in, not the game. To state a law, the law agent adds the smallest model it needs to `TYPES.bend` (a player with a position, a `walk` function). The game the chat builds (for example `plataforma.html`, in JavaScript) is separate code that never meets that model.
-- So a game can break a rule and nothing turns red.
-
-## 0.2.0: the laws check the game itself
-
-- The game's logic is written in Bend: its state, and what each action does (walk, jump, lose a life). A page only reads input and draws what Bend returns, as LawEditor itself is built.
-- The laws talk about that code, not about a stand-in. Bend checks them, and proofs show the game keeps them.
-- If the chat changes the game and breaks a rule (the player rises while walking), the law turns red.
-
-## The first decision: which language
-
-Laws only work on Bend code. So a request to build starts with this choice:
-
-1. **The person names another language** (Python, Unity, JavaScript…): build in it, and say the laws won't check this code.
-2. **No language named**: build the logic in Bend, and the laws check it.
-3. **No language named, but Bend can't do it yet** (3D, for example): say so, and ask whether to go on in another language (without law checks) or with a simpler version in Bend.
-
-## Open questions
-
-- **Who decides case 3?** The model (a skill: it guesses and can be wrong), or a list in Bend of what Bend can do today (2D canvas, keyboard, sound…) that the system reads and laws can check. The second fits the method: a system step, proved, not a model's guess.
-- **Where the flow lives.** Like `HEAR.flow()` and `OFFER.flow()`, this flow should be data in `FLOW.bend` form, drawn by Bend-UI's diagram and checked by the same laws (whole, skill then system, no write without the person) before it is built.
-- **What the person sees.** Which language the game is in, and whether its laws are on, should be visible in the chat, not guessed.
-- **The step after.** Once the logic is in Bend, how the law agent and the game code stay one: the law agent writes laws against the game's functions instead of adding a stand-in to `TYPES.bend`.

@@ -29,56 +29,56 @@ def dir(+key: String) -> IO(String):
     known : String <- Sys.read_file(Places.folders())
     return Places.folder(key, known)
 
-# $0 the folder, $1 its name, $2 "1" for a conversation's own new folder (a draft), $3 "1" for a folder
-# opened from elsewhere (its files stay as they are: no game/ is made in it).
+# $0 the folder, $1 its name, $2 "1" for a conversation's own new folder (a draft). Only LawEditor's own
+# .laweditor folder is made: no file of the project is, in a new folder or in one opened from elsewhere.
 def make_sh() -> String:
-  "[ -n \"$2\" ] || [ -d \"$0\" ] || exit 0; new=; [ -d \"$0/.laweditor\" ] || new=1; mkdir -p \"$0/.laweditor/chats\" \"$0/.laweditor/allowed\" \"$0/.laweditor/turns\"; [ -n \"$3\" ] || mkdir -p \"$0/game\"; [ -e \"$0/.laweditor/name\" ] || printf '%s' \"$1\" > \"$0/.laweditor/name\"; [ -e \"$0/GDD.md\" ] || : > \"$0/GDD.md\"; [ -e \"$0/TYPES.bend\" ] || printf 'import Base\\n' > \"$0/TYPES.bend\"; [ -e \"$0/LAWS.bend\" ] || printf 'import Base\\nimport ./TYPES.bend as T\\n' > \"$0/LAWS.bend\"; [ -n \"$new\" ] && [ -n \"$2\" ] && : > \"$0/.laweditor/draft\"; printf ok"
+  "[ -n \"$2\" ] || [ -d \"$0\" ] || exit 0; new=; [ -d \"$0/.laweditor\" ] || new=1; mkdir -p \"$0/.laweditor/chats\" \"$0/.laweditor/allowed\" \"$0/.laweditor/turns\"; [ -e \"$0/.laweditor/name\" ] || printf '%s' \"$1\" > \"$0/.laweditor/name\"; [ -n \"$new\" ] && [ -n \"$2\" ] && : > \"$0/.laweditor/draft\"; printf ok"
 
 def ensure.made(+dir: String, +out: String) -> String:
   Sys.pick(String.eq(out, "ok"), dir, "")
 
-def ensure.at(none: Bool, +dir: String, +draft: Bool, +outside: Bool) -> IO(String):
+def ensure.at(none: Bool, +dir: String, +draft: Bool) -> IO(String):
   match none:
     case True{}:
       IO.pure(String, "")
     case False{}:
       do IO<String>:
-        +out : String <- Sys.sh(make_sh(), [dir, "", Sys.pick(draft, "1", ""), Sys.pick(outside, "1", "")], 5000)
+        +out : String <- Sys.sh(make_sh(), [dir, "", Sys.pick(draft, "1", "")], 5000)
         return ensure.made(dir, out)
 
-# The folder a conversation works in, made ready. A conversation with no game yet names itself as its
-# project: it gets a folder of its own, marked as a draft (not a game until it has a sentence or a file).
+# The folder a conversation works in, made ready. A conversation with no project yet names itself as
+# one: it gets a folder of its own, marked as a draft (not a project until it has a rule or a file).
 # Answers the folder, or "" when the key names no project.
 def ensure(+key: String, +conv: String) -> IO(String):
   do IO<String>:
     +dir : String <- dir(key)
-    ensure.at(String.is_empty(dir), dir, String.eq(key, conv), Places.is_outside(key))
+    ensure.at(String.is_empty(dir), dir, String.eq(key, conv))
 
 # ---------- The lists ----------
 
-# GET /api/projects: the games, one per line: its key, a tab, its name. A draft isn't a game yet.
-def games() -> IO(String):
+# GET /api/projects: the projects, one per line: its key, a tab, its name. A draft isn't one yet.
+def projects() -> IO(String):
   Sys.sh(projects_sh() ++ "projects | while IFS=\"$t\" read -r k d; do [ -e \"$d/.laweditor/draft\" ] && continue; printf '%s\\t%s\\n' \"$k\" \"$(cat \"$d/.laweditor/name\" 2>/dev/null || basename \"$d\")\"; done", [], 5000)
 
 # GET /api/conversations: every conversation of every project, the one that moved last first. One per line:
-# its project's key, its game's name (none for a draft), its name, its state (idle, working, asking) and
+# its project's key, its project's name (none for a draft), its name, its state (idle, working, asking) and
 # its title, split by tabs.
 def conversations() -> IO(String):
   Sys.sh(projects_sh() ++ "projects | while IFS=\"$t\" read -r k d; do g=''; [ -e \"$d/.laweditor/draft\" ] || g=$(cat \"$d/.laweditor/name\" 2>/dev/null || basename \"$d\"); for f in \"$d\"/.laweditor/chats/*.log; do [ -e \"$f\" ] || continue; i=$(basename \"$f\" .log); m=$(stat -f %m \"$f\" 2>/dev/null || stat -c %Y \"$f\"); printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$m\" \"$k\" \"$g\" \"$i\" \"$(cat \"${f%.log}.state\" 2>/dev/null || printf idle)\" \"$(cat \"${f%.log}.title\" 2>/dev/null)\"; done; done | sort -rn | cut -f2-", [], 10000)
 
-# ---------- A game is born, and named ----------
+# ---------- A project is born, and named ----------
 
 # A key in the home never starts with "x-": that marks a folder opened from elsewhere.
 def home_key(+slug: String) -> String:
-  Sys.pick(Places.is_outside(slug), "game-" ++ slug, slug)
+  Sys.pick(Places.is_outside(slug), "project-" ++ slug, slug)
 
-# A draft with a sentence (GDD.md) or a file in game/ becomes a game: it gets its name, and its folder
-# takes that name (rio-negro; rio-negro-2 if taken). Answers the new key, or "" when nothing changed.
-# Only a draft's own conversation is in it, and no turn of it is running when this is called.
+# A draft with a rule (a sentence in RULES.md) or a file of its own becomes a project: it gets its name,
+# and its folder takes that name (rio-negro; rio-negro-2 if taken). Answers the new key, or "" when
+# nothing changed. Only a draft's own conversation is in it, and no turn of it is running when this is called.
 def promote(+key: String, +name: String) -> IO(String):
-  Sys.sh("[ -e \"$0/.laweditor/draft\" ] || exit 0; { [ -n \"$(ls -A \"$0/game\" 2>/dev/null)\" ] || [ -s \"$0/GDD.md\" ]; } || exit 0; n=\"$2\"; i=1; while [ -e \"$n\" ]; do i=$((i+1)); n=\"$2-$i\"; done; printf '%s' \"$1\" > \"$0/.laweditor/name\"; rm \"$0/.laweditor/draft\"; mv \"$0\" \"$n\" && printf '%s' \"$n\"", [Places.safe(key), String.trim(name), home_key(Chat.slug(name))], 5000)
+  Sys.sh("[ -e \"$0/.laweditor/draft\" ] || exit 0; { [ -n \"$(ls \"$0\" 2>/dev/null | grep -v '^RULES[.]md$')\" ] || grep -q '[^[:space:]]' \"$0/RULES.md\" 2>/dev/null; } || exit 0; n=\"$2\"; i=1; while [ -e \"$n\" ]; do i=$((i+1)); n=\"$2-$i\"; done; printf '%s' \"$1\" > \"$0/.laweditor/name\"; rm \"$0/.laweditor/draft\"; mv \"$0\" \"$n\" && printf '%s' \"$n\"", [Places.safe(key), String.trim(name), home_key(Chat.slug(name))], 5000)
 
-# POST /api/p/<key>/rename, body: the game's new name. Its folder keeps its place.
+# POST /api/p/<key>/rename, body: the project's new name. Its folder keeps its place.
 def rename(+dir: String, +name: String) -> IO(String):
   Sys.sh("[ -d \"$0/.laweditor\" ] && printf '%s' \"$1\" > \"$0/.laweditor/name\"; printf ok", [dir, String.trim(name)], 5000)
 
@@ -95,7 +95,7 @@ def opened.line(+key: String, +dir: String, +made: String) -> String:
 def opened.ready(+key: String) -> IO(String):
   do IO<String>:
     +d : String <- dir(key)
-    +made : String <- Sys.sh(make_sh(), [d, Ask.base_name(d), "", Sys.pick(Places.is_outside(key), "1", "")], 5000)
+    +made : String <- Sys.sh(make_sh(), [d, Ask.base_name(d), ""], 5000)
     return opened.line(key, d, made)
 
 def opened.at(none: Bool, +key: String) -> IO(String):

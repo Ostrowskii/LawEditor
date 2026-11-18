@@ -4,7 +4,8 @@
 #
 # It runs in the home of the projects (engine/PLACES.bend) and is told where LawEditor itself is: it
 # serves the page from there (dist/) and reads what the AIs are told (harness/). LAWEDITOR_PORT moves it
-# from 4280. It keeps no "current" project and no conversation in memory: every request names its project
+# from 4280. What the projects built is served at a second door (LAWEDITOR_PAGES_PORT, or the port plus
+# 1000): see "The pages door" below. It keeps no "current" project and no conversation in memory: every request names its project
 # and its conversation, and what happened is in their files. So any number of windows and conversations
 # can go at once, and all of them see the same thing.
 #
@@ -12,6 +13,7 @@
 
 import Base
 import ./engine/SYS.bend as Sys
+import ./engine/PLACES.bend as Places
 import ./engine/PROJECTS.bend as Proj
 import ./engine/TURN.bend as Turn
 import ./engine/LAW.bend as Law
@@ -71,12 +73,18 @@ def is_ours(+origin: String, +host: String, +address: String, +port: String) -> 
 
 def content_type(+path: String) -> String:
   Sys.pick(String.ends_with(path, ".html"), "text/html; charset=utf-8",
-  Sys.pick(String.ends_with(path, ".js"), "text/javascript; charset=utf-8",
+  Sys.pick((String.ends_with(path, ".js") || String.ends_with(path, ".mjs")), "text/javascript; charset=utf-8",
   Sys.pick(String.ends_with(path, ".css"), "text/css; charset=utf-8",
+  Sys.pick(String.ends_with(path, ".json"), "application/json",
   Sys.pick(String.ends_with(path, ".svg"), "image/svg+xml",
   Sys.pick(String.ends_with(path, ".webp"), "image/webp",
   Sys.pick(String.ends_with(path, ".png"), "image/png",
-  "text/plain; charset=utf-8"))))))
+  Sys.pick(String.ends_with(path, ".jpg"), "image/jpeg",
+  Sys.pick(String.ends_with(path, ".gif"), "image/gif",
+  Sys.pick(String.ends_with(path, ".wav"), "audio/wav",
+  Sys.pick(String.ends_with(path, ".mp3"), "audio/mpeg",
+  Sys.pick(String.ends_with(path, ".ogg"), "audio/ogg",
+  "text/plain; charset=utf-8"))))))))))))
 
 def http(status: String, ctype: String, body: String) -> String:
   "HTTP/1.1 " ++ status ++ "\r\nContent-Type: " ++ ctype ++ "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n" ++ body
@@ -215,9 +223,9 @@ def is2(+p: List<&2, String>, a: String, b: String) -> Bool:
 
 # ---------- A project: /api/p/<key>/… ----------
 
-# The files the Laws view may read and write in a project.
+# The files the Laws view may read and write in a project: the person's rules and their laws.
 def is_project_file(+name: String) -> Bool:
-  (String.eq(name, "GDD.md") || String.eq(name, "TYPES.bend") || String.eq(name, "LAWS.bend"))
+  (String.eq(name, "RULES.md") || String.eq(name, "LAWS.bend"))
 
 def saved(+dir: String, name: String, body: String) -> IO(String):
   do IO<String>:
@@ -328,6 +336,10 @@ def mcp(+key: String, +conv: String, +turn: String, +msg: String) -> IO(String):
     +dir : String <- Proj.dir(key)
     mcp.at(Gate.is_notice(msg), Gate.is_call(msg), dir, conv, turn, msg)
 
+# Where the pages door is ("" when it couldn't open): a window makes a project's address from it.
+def pages_url(+cx: Sys.Ctx) -> String:
+  Sys.pick(U32.is_eq(Sys.pages(cx), 0), "", "http://" ++ Sys.pages_address(cx))
+
 # ---------- Routes ----------
 # p: the path's pieces ("/api/c/rio-negro/abc/say" is api, c, rio-negro, abc, say).
 
@@ -338,7 +350,8 @@ def route_get(+cx: Sys.Ctx, +p: List<&2, String>, +path: String) -> IO(String):
     (is2(p, "api", "told"), told(cx, Sys.nth(p, 2n))),
     ((is2(p, "api", "debug") && String.eq(Sys.nth(p, 2n), "check")), debug_check(cx)),
     ((is2(p, "api", "debug") && String.eq(Sys.nth(p, 2n), "LAWS.bend")), ok(Sys.read_file(Sys.root(cx) ++ "/LAWS.bend"))),
-    (is2(p, "api", "projects"), ok(Proj.games())),
+    (is2(p, "api", "projects"), ok(Proj.projects())),
+    (is2(p, "api", "pages"), ok(IO.pure(String, pages_url(cx)))),
     (is2(p, "api", "conversations"), ok(Proj.conversations())),
     (is2(p, "api", "p"), project(cx, False{}, Sys.nth(p, 2n), Ev.after.drop(p, 3n), "")),
     (is2(p, "api", "c"), conversation(cx, False{}, Sys.nth(p, 2n), Sys.nth(p, 3n), Ev.after.drop(p, 4n), "")),
@@ -431,8 +444,58 @@ def answer.at(image: Bool, s: Socket, +req: String, +cx: Sys.Ctx) -> IO(Unit):
     case False{}:
       answer.text(s, req, cx)
 
+# ---------- The pages door ----------
+# A project's page, as Bend last bundled it (engine/BUILD.bend), is served from a second port and never
+# from the app's own. To the browser, a page a chat wrote is then another site: a request it sends to the
+# app is named by another origin and refused (is_ours), so no page can use the app's own powers (run a
+# command, answer a question). The door only reads: GET /<key>/<file>, from the project's
+# .laweditor/page. A request belongs to this door when it is addressed to it by name (Host).
+
+def is_pages(+host: String, +cx: Sys.Ctx) -> Bool:
+  (Bool.not(U32.is_eq(Sys.pages(cx), 0)) && (String.eq(host, Sys.pages_address(cx)) || String.eq(host, "localhost:" ++ U32.show(Sys.pages(cx)))))
+
+def page.send_text(s: Socket, res: String) -> IO(Unit):
+  do IO<Unit>:
+    sent : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(s, res)
+    send_done(sent)
+
+# The file a path names: a folder is its index.html.
+def page.file(+rest: String) -> String:
+  Sys.pick((String.is_empty(rest) || String.ends_with(rest, "/")), rest ++ "index.html", rest)
+
+# bare: the address names the project and nothing after it, not even "/": the page's own files are asked
+# for beside it, so it is sent to the same address with the "/".
+def page.send(bad: Bool, bare: Bool, s: Socket, +key: String, +file: String) -> IO(Unit):
+  match bad bare:
+    case True{} _:
+      page.send_text(s, not_found())
+    case False{} True{}:
+      page.send_text(s, "HTTP/1.1 301 Moved Permanently\r\nLocation: /" ++ key ++ "/\r\nConnection: close\r\n\r\n")
+    case False{} False{}:
+      do IO<Unit>:
+        r : Result<&1, &1, U32 & String, File> <- File.open(file, "r")
+        send_bytes.open(s, r, content_type(file))
+
+# path: without what comes after "?". p: its pieces.
+def page.at(s: Socket, get: Bool, +path: String, +p: List<&2, String>) -> IO(Unit):
+  do IO<Unit>:
+    +dir : String <- Proj.dir(Sys.nth(p, 0n))
+    page.send((Bool.not(get) || String.contains(path, "..") || String.is_empty(Sys.nth(p, 0n)) || String.is_empty(dir)),
+      (String.is_empty(Sys.nth(p, 1n)) && Bool.not(String.ends_with(path, "/"))),
+      s, Places.safe(Sys.nth(p, 0n)), Places.page(dir) ++ "/" ++ page.file(String.join(Ev.after.drop(p, 1n), "/")))
+
+def page.answer(s: Socket, +req: String) -> IO(Unit):
+  page.at(s, String.eq(req_word(req, 0n), "GET"), Sys.nth(String.split(req_word(req, 1n), '?'), 0n), Ev.after.drop(String.split(Sys.nth(String.split(req_word(req, 1n), '?'), 0n), '/'), 1n))
+
+def answer.door(pages: Bool, s: Socket, +req: String, +cx: Sys.Ctx) -> IO(Unit):
+  match pages:
+    case True{}:
+      page.answer(s, req)
+    case False{}:
+      answer.at(is_image(req_word(req, 1n)), s, req, cx)
+
 def answer(s: Socket, +req: String, +cx: Sys.Ctx) -> IO(Unit):
-  answer.at(is_image(req_word(req, 1n)), s, req, cx)
+  answer.door(is_pages(header(req, "host:"), cx), s, req, cx)
 
 # A POST whose body hasn't arrived with the headers gets one more read.
 def more(m: Socket & Result<&1, &1, U32 & String, Maybe<&1, String>>, head: String, +cx: Sys.Ctx) -> IO(Unit):
@@ -514,12 +577,37 @@ def root_of(args: List<String>) -> String:
     case p <> rest:
       root_of.at(rest)
 
+# The pages door's port: LAWEDITOR_PAGES_PORT, or the app's port plus 1000.
+def pages_port(+port: U32, m: Maybe<&2, U32>) -> U32:
+  match m:
+    case None{}:
+      (port + 1000 : U32)
+    case Some{n}:
+      n
+
+# The pages door opens beside the app, or not at all (its port is taken): the app still runs, and a
+# project's page then has no Open.
+def pages.open(r: Result<&1, &1, U32 & String, Listener>, +cx: Sys.Ctx) -> IO(Sys.Ctx):
+  match r:
+    case Fail{e}:
+      do IO<Sys.Ctx>:
+        IO.print("LawEditor: the pages door could not open at " ++ Sys.pages_address(cx) ++ " (LAWEDITOR_PAGES_PORT names another port). A project's page can't be opened from the app.")
+        return Sys.Ctx{Sys.root(cx), Sys.port(cx), 0}
+    case Done{l}:
+      do IO<Sys.Ctx>:
+        IO.spawn(Unit, serve(4294967295n, l, cx))
+        IO.print("LawEditor: what the projects built is at http://" ++ Sys.pages_address(cx))
+        return cx
+
 def main() -> IO(Unit):
   do IO<Unit>:
     args : List<String> <- IO.args()
     +port : String <- Sys.env("LAWEDITOR_PORT", "4280")
-    +cx : Sys.Ctx = Sys.Ctx{root_of(args), port_of(U32.read(port))}
+    +pages : String <- Sys.env("LAWEDITOR_PAGES_PORT", "")
+    +want : Sys.Ctx = Sys.Ctx{root_of(args), port_of(U32.read(port)), pages_port(port_of(U32.read(port)), U32.read(pages))}
     Proj.start()
-    l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", Sys.port(cx)))
+    l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", Sys.port(want)))
+    r : Result<&1, &1, U32 & String, Listener> <- TCP.listen("127.0.0.1", Sys.pages(want))
+    +cx : Sys.Ctx <- pages.open(r, want)
     IO.print("LawEditor: http://" ++ Sys.address(cx))
     serve(4294967295n, l, cx)

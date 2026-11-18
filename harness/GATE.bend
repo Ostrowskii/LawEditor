@@ -139,10 +139,23 @@ def answer(+msg: String, +said: String) -> String:
 
 # ---------- The question, while Claude waits ----------
 
+# A file that isn't Bend: what the person is told about it where they are asked (POLICY.bend: the layers).
+# "" for a .bend file, and for a command.
+def layer_note.at(file: Bool, +what: String) -> String:
+  match file:
+    case True{}:
+      P.note_of(Ask.extension(what))
+    case False{}:
+      ""
+
+def layer_note(+tool: String, +what: String) -> String:
+  layer_note.at(Ask.is_file_tool(tool), what)
+
 # What the page shows: the question on the first line; on the second, how to draw what would change (its
-# language and name, split by a tab); then what would change (a command may hold new lines).
+# language and name) and what is said of a file that isn't Bend, split by tabs; then what would change (a
+# command may hold new lines).
 def question(+msg: String) -> String:
-  Ask.question(tool(msg), what(msg)) ++ "\n" ++ Ask.preview_lang(tool(msg), msg) ++ Ask.tab() ++ Ask.preview_name(tool(msg), msg) ++ "\n" ++ Ask.preview(tool(msg), msg)
+  Ask.question(tool(msg), what(msg)) ++ "\n" ++ Ask.preview_lang(tool(msg), msg) ++ Ask.tab() ++ Ask.preview_name(tool(msg), msg) ++ Ask.tab() ++ layer_note(tool(msg), what(msg)) ++ "\n" ++ Ask.preview(tool(msg), msg)
 
 # What was asked, in a few words, for the line that stays once the person answered ("Write index.html").
 def action_of(+title: String) -> String:

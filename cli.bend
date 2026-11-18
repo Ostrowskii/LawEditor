@@ -52,7 +52,7 @@ def mode(c: Cli) -> U32:
     case Cli{port, ai, key, conv, seen, mode}:
       mode
 
-# The project a request names: the conversation's own name while it has no game.
+# The project a request names: the conversation's own name while it has no project.
 def key.or(+key: String, +conv: String) -> String:
   Sys.pick(String.is_empty(key), conv, key)
 
@@ -112,9 +112,9 @@ def settings(+c: Cli) -> String:
 
 # ---------- What an event looks like, in text ----------
 
-# What the person reads of a reply: without its LAW:, MODE:, PLAN: and GAME: lines.
+# What the person reads of a reply: without its LAW:, MODE:, PLAN: and PROJECT: lines.
 def shown(text: String) -> String:
-  Offer.words(Hear.words(Ask.plan_words(Chat.game_words(text))))
+  Offer.words(Hear.words(Ask.plan_words(Chat.project_words(text))))
 
 def indent.go(ls: List<&2, String>) -> String:
   match ls:
@@ -134,18 +134,40 @@ def keys(+q: String) -> String:
   Sys.pick(Ev.is_mode(q), "  [s] Switch   [n] Stay",
   "  [y] Allow   [s] Allow for this session   [n] Don't allow"))
 
-# A gate question's text is three parts (GATE.question): the question, how to draw what would change, and
-# what would change.
+# What is said of a file that isn't Bend, on a line of its own ("" when nothing is).
+def gate_note(+note: String) -> String:
+  Sys.pick(String.is_empty(note), "", "  ! " ++ note ++ "\n")
+
+# A gate question's text is three parts (GATE.question): the question; how to draw what would change, with
+# what is said of a file that isn't Bend (the third piece of that line); and what would change.
 def gate_text(+text: String) -> String:
-  "  ? " ++ Sys.nth(String.lines(text), 0n) ++ "\n" ++ indent(String.join(Ev.after.drop(String.lines(text), 2n), "\n"))
+  "  ? " ++ Sys.nth(String.lines(text), 0n) ++ "\n" ++ gate_note(Sys.nth(String.split(Sys.nth(String.lines(text), 1n), Ev.tab()), 2n)) ++ indent(String.join(Ev.after.drop(String.lines(text), 2n), "\n"))
 
 def ask_text(+q: String, +text: String) -> String:
   Sys.pick(Ev.is_law(q), "  Law? \"" ++ text ++ "\"\n",
   Sys.pick(Ev.is_mode(q), "  ? " ++ Sys.nth(String.lines(text), 0n) ++ "\n" ++ indent(String.join(Ev.after.drop(String.lines(text), 1n), "\n")),
   gate_text(text)))
 
-# One event, as lines to print ("" for the ones that say nothing here).
-def show(+l: String) -> String:
+# What Bend said of the project after a reply changed it (engine/BUILD.bend): its check, and its page.
+# A text's first line is the file (or the files); the rest is what Bend said.
+def bend_said(+text: String) -> String:
+  indent(String.join(Ev.after.drop(String.lines(text), 1n), "\n"))
+
+def check_text(+state: String, +text: String) -> String:
+  Sys.pick(String.eq(state, "ok"), "  ✓ Bend checked " ++ Sys.nth(String.lines(text), 0n) ++ ": no errors\n",
+  "  ✗ Bend found an error in " ++ Sys.nth(String.lines(text), 0n) ++ "\n" ++ bend_said(text))
+
+# at: where the project's page is served ("" when the pages door isn't open).
+def page_at(+at: String) -> String:
+  Sys.pick(String.is_empty(at), "", "  ▸ " ++ at ++ "\n")
+
+def page_text(+state: String, +text: String, +at: String) -> String:
+  Sys.pick(String.eq(state, "ok"), "  ✓ Bend bundled " ++ Sys.nth(String.lines(text), 0n) ++ "\n" ++ page_at(at),
+  Sys.pick(String.eq(state, "warn"), "  ! " ++ text ++ "\n" ++ page_at(at),
+  "  ✗ Bend could not bundle " ++ Sys.nth(String.lines(text), 0n) ++ "\n" ++ bend_said(text)))
+
+# One event, as lines to print ("" for the ones that say nothing here). at: the project's page (page_text).
+def show(+l: String, +at: String) -> String:
   Sys.pick(Ev.is_a(l, "me"), "❯ " ++ Ev.field(l, 0n) ++ "\n",
   Sys.pick(Ev.is_a(l, "turn"), "  ● " ++ Ev.field(l, 1n) ++ " is answering…\n",
   Sys.pick(Ev.is_a(l, "reply"), "\n" ++ shown(Ev.field(l, 1n)) ++ "\n\n",
@@ -153,16 +175,26 @@ def show(+l: String) -> String:
   Sys.pick(Ev.is_a(l, "stopped"), "  · Stopped.\n",
   Sys.pick(Ev.is_a(l, "ask"), ask_text(Ev.field(l, 0n), Ev.field(l, 1n)),
   Sys.pick(Ev.is_a(l, "note"), note_mark(Ev.field(l, 1n)) ++ Ev.field(l, 2n) ++ "\n",
-  Sys.pick(Ev.is_a(l, "game"), "  ▸ " ++ Ev.field(l, 1n) ++ "  (" ++ Ev.field(l, 0n) ++ ")\n",
+  Sys.pick(Ev.is_a(l, "project"), "  ▸ " ++ Ev.field(l, 1n) ++ "  (" ++ Ev.field(l, 0n) ++ ")\n",
+  Sys.pick(Ev.is_a(l, "check"), check_text(Ev.field(l, 1n), Ev.field(l, 2n)),
+  Sys.pick(Ev.is_a(l, "page"), page_text(Ev.field(l, 1n), Ev.field(l, 2n), at),
   Sys.pick(Ev.is_a(l, "ran"), "$ " ++ Ev.field(l, 0n) ++ "\n" ++ indent(Ev.field(l, 2n)),
-  "")))))))))
+  "")))))))))))
 
-def show_all(ls: List<&2, String>) -> String:
+def show_all(ls: List<&2, String>, +at: String) -> String:
   match ls:
     case Nil{}:
       ""
     case +h <> t:
-      show(h) ++ show_all(t)
+      show(h, at) ++ show_all(t, at)
+
+# Is a page among these events? Only then is the pages door asked where it is.
+def has_page(ls: List<&2, String>) -> Bool:
+  match ls:
+    case Nil{}:
+      False{}
+    case +h <> t:
+      (Ev.is_a(h, "page") || has_page(t))
 
 # ---------- The lists ----------
 
@@ -176,11 +208,11 @@ def rows(ls: List<&2, String>, +n: Nat) -> String:
     case +h <> t:
       row(h, n) ++ rows(t, 1n+n)
 
-# The conversations, numbered from 1: ● works, ◆ waits for you; the game's name in brackets.
+# The conversations, numbered from 1: ● works, ◆ waits for you; the project's name in brackets.
 def listing(text: String) -> String:
   "\n  Conversations\n" ++ rows(Ev.lines(text), 1n) ++ "\n"
 
-# Where a conversation is now, from the server's list (its project gets a folder when its game is born).
+# Where a conversation is now, from the server's list (its project gets a folder once it is one).
 def find.pick(hit: Bool, +l: String, +later: String) -> String:
   match hit:
     case True{}:
@@ -418,6 +450,19 @@ def act.at(asking: Bool, running: Bool, +c: Cli, f: File, +log: String) -> IO(St
 def act(+c: Cli, f: File, +log: String) -> IO(Step):
   act.at(Bool.not(String.is_empty(Ev.asking(log))), Bool.not(String.is_empty(Ev.running(log))), c, f, log)
 
+# Where the open conversation's project has its page (the server's pages door), asked only when needed.
+def page_url(+base: String, +c: Cli) -> String:
+  Sys.pick(String.is_empty(String.trim(base)), "", String.trim(base) ++ "/" ++ key(c) ++ "/")
+
+def page_where(need: Bool, +c: Cli) -> IO(String):
+  match need:
+    case False{}:
+      IO.pure(String, "")
+    case True{}:
+      do IO<String>:
+        +base : String <- get(url(c, "/api/pages"))
+        return page_url(base, c)
+
 # Each round: where the conversation is now, its new events printed, then one thing done.
 def loop(fuel: Nat, s: Step) -> IO(Unit):
   match fuel s:
@@ -430,7 +475,8 @@ def loop(fuel: Nat, s: Step) -> IO(Unit):
         +list : String <- get(url(c, "/api/conversations"))
         +c2 : Cli = follow(c, list)
         +log : String <- get(conversation(c2, "events/0"))
-        IO.write(show_all(Ev.after.drop(Ev.lines(log), seen(c2))))
+        +at : String <- page_where(has_page(Ev.after.drop(Ev.lines(log), seen(c2))), c2)
+        IO.write(show_all(Ev.after.drop(Ev.lines(log), seen(c2)), at))
         s2 : Step <- act(at_seen(c2, Nat.max(seen(c2), Ev.count(log))), f, log)
         loop(n, s2)
 

@@ -29,9 +29,10 @@ def reply(agent: U32 & String, check: U32 & String) -> String:
   "error\nThe agent answered without a law:\n" ++ aout))))
 
 # One law agent at a time in a project: two would write LAWS.bend over each other. The second waits for
-# the first (a folder is the lock; the server clears it when it starts).
+# the first (a folder is the lock; the server clears it when it starts). A project with no law yet gets
+# its LAWS.bend here, empty: the agent only ever adds to it.
 def locked_sh() -> String:
-  "cd \"$0\" || exit 1; until mkdir .laweditor/lawlock 2>/dev/null; do sleep 0.3; done; trap 'rmdir .laweditor/lawlock' EXIT; \"$@\""
+  "cd \"$0\" || exit 1; until mkdir .laweditor/lawlock 2>/dev/null; do sleep 0.3; done; trap 'rmdir .laweditor/lawlock' EXIT; [ -e LAWS.bend ] || printf 'import Base\\n' > LAWS.bend; \"$@\""
 
 def write(+cx: Sys.Ctx, +dir: String, +ai: String, sentence: String) -> IO(String):
   do IO<String>:

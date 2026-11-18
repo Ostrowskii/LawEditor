@@ -26,11 +26,18 @@ import { where, key, project, conversation, go, fresh, get, post, sleep, fields,
 const $ = (id) => document.getElementById(id);
 const page = document.querySelector(".page");
 
+// Where the projects' pages are served (the server's pages door: another address than the app's own), or
+// "" when that door couldn't open.
+let pages = ""; get("/api/pages").then((url) => { pages = url.trim(); }).catch(() => {});
 const messages = createMessages($("chat"), page, {
   output: (turn, n) => conversation(`output/${turn}/${n}`),
   openFolder: () => post(project("open")),
   openFile: (path) => document.dispatchEvent(new CustomEvent("laweditor:file", { detail: path })),
   changed: (files) => document.dispatchEvent(new CustomEvent("laweditor:changes", { detail: files })),
+  // A file that isn't Bend says so beside its name (POLICY.bend: the layers); "" for a .bend file.
+  tag: (file) => P.tag_of(A.extension(file)),
+  // The project's page, as Bend last bundled it, in a tab of its own (null: there is nowhere to open it).
+  openPage: () => (pages ? () => window.open(`${pages}/${encodeURIComponent(key())}/`, "_blank", "noopener") : null),
 });
 const face = createFace();
 const [aiDd, modelDd] = document.querySelectorAll("#composer .composer__bar .dropdown:not(#place):not(#mode)");
@@ -39,16 +46,16 @@ const models = createModels(aiDd, modelDd, saved);
 const chatMode = createMode($("mode"), aiDd, models.get().ai, () => conversation("allowed"));   // POLICY.bend, HARNESS.md
 const place = createPlace($("place"), $("place-name"));
 
-// What the person reads: the reply without its LAW:, MODE:, PLAN: and GAME: lines (each module hides its own).
-const shown = (text) => inParts((part) => O.words(H.words(A.plan_words(C.game_words(part)))), text);
+// What the person reads: the reply without its LAW:, MODE:, PLAN: and PROJECT: lines (each module hides its own).
+const shown = (text) => inParts((part) => O.words(H.words(A.plan_words(C.project_words(part)))), text);
 // The AI, its model and the mode, as the server reads them at the head of what is sent.
 const settings = () => { const { ai, model } = models.get(); return `${ai}\t${model}\t${chatMode.get()}`; };
 
 // ---------- The conversation on the page ----------
 // seen: how many of the conversation's events were read and drawn. What goes on now (a turn runs, a question
-// waits, the game's name) is asked to the server, which reads it from the conversation with EVENTS.bend.
+// waits, the project's name) is asked to the server, which reads it from the conversation with EVENTS.bend.
 let seen = 0, reader = 0, started = false;
-let now = { running: "", asking: "", game: "" };
+let now = { running: "", asking: "", project: "" };
 let reply = null, turn = "", streamed = "";       // the reply being drawn, its turn, its text so far
 let ui = null;                                    // the turn on the page: a reply and what comes of it, until the person speaks
 const cards = new Map();                          // question -> what the turn keeps of it (a rule's row, an answer's line)
@@ -65,8 +72,8 @@ async function sync() {
   const me = reader;
   let text = ""; try { text = await get(conversation("now")); } catch {}
   if (me !== reader) return;
-  const [running = "", asking = "", game = ""] = text.replace(/\n$/, "").split("\t");
-  now = { running, asking, game };
+  const [running = "", asking = "", name = ""] = text.replace(/\n$/, "").split("\t");
+  now = { running, asking, project: name };
   composer.set(!!running, !!asking);
 }
 
@@ -100,11 +107,12 @@ function question(q, text, open) {
     card = t.record("");   // its note says it whole ("Switched to Ask before changes.")
     ask = { title, body: why.length ? `<span class="turn__note">${esc(why.join("\n"))}</span>` : "" };
   } else {
-    // GATE.question(): the question, then the language and name of what would change, then what would change.
-    const [title, meta = "", ...preview] = text.split("\n"), [lang, name] = meta.split("\t");
+    // GATE.question(): the question; then the language and name of what would change, and what is said of
+    // a file that isn't Bend; then what would change.
+    const [title, meta = "", ...preview] = text.split("\n"), [lang, name, note = ""] = meta.split("\t");
     const code = preview.join("\n").replace(/\n+$/, "");
     card = t.record(G.action_of(title));
-    ask = { title, body: code ? codeBlock(code, { lang, name, clip: true }) : "" };
+    ask = { title, body: (note ? `<span class="turn__note">${esc(note)}</span>` : "") + (code ? codeBlock(code, { lang, name, clip: true }) : "") };
   }
   cards.set(q, card);
   if (!open) return;
@@ -147,7 +155,10 @@ async function draw(line, old, later) {
     cards.get(f(0))?.set(f(1), f(2));
     if (!old && Ev.is_law(f(0)) && f(1) !== "busy") document.dispatchEvent(new CustomEvent("laweditor:changed"));
   }
-  if (kind === "game") { go(f(0)); place.lock(f(1)); list.refresh(); }
+  if (kind === "project") { go(f(0)); place.lock(f(1)); list.refresh(); }
+  // What Bend said of the project after the reply changed it (engine/BUILD.bend).
+  if (kind === "check") uiTurn().checked(f(1), f(2));
+  if (kind === "page") uiTurn().bundled(f(1), f(2));
   if (kind === "ran") { ui = null; messages.ran(f(0), f(1), f(2)); }
 }
 
@@ -224,16 +235,16 @@ function command(name) {
 }
 
 function reset() {
-  reader++; seen = 0; now = { running: "", asking: "", game: "" }; ui = null; composer.answered(); reply = null; turn = ""; streamed = ""; mineShown = 0;
+  reader++; seen = 0; now = { running: "", asking: "", project: "" }; ui = null; composer.answered(); reply = null; turn = ""; streamed = ""; mineShown = 0;
   cards.clear(); messages.clear(); meter.hidden = true;
 }
 const toChat = () => document.querySelector('#side [data-view="chat"]').click();
 
 // A new conversation: the start again, with nothing to pick. The one that was open goes on by itself.
-function newConversation(game) {
+function newConversation(into) {
   reset(); fresh();
   if (started) { started = false; start = createStart(page, $("composer")); }
-  place.open(); if (game) place.choose(game.key, game.name);
+  place.open(); if (into) place.choose(into.key, into.name);
   composer.set(false, false);
   toChat(); show(); list.refresh(); follow(); composer.focus();
 }
@@ -243,16 +254,16 @@ async function openConversation(k, id) {
   reset(); go(k, id);
   await leaveStart(); toChat();
   await read(true);
-  place.lock(now.game || (rows.get(id) || ""));
+  place.lock(now.project || (rows.get(id) || ""));
   list.refresh(); follow();
 }
 
-// The side bar's list. A conversation that got its game (its folder was named) is followed there.
-const rows = new Map();   // conversation -> its game's name, as the list last said
+// The side bar's list. A conversation that got its project (its folder was named) is followed there.
+const rows = new Map();   // conversation -> its project's name, as the list last said
 const list = createList($("history"), {
   current: () => (inChat ? where.conv : ""),   // in Laws, Laws is the place: no conversation is marked too
   onOpen: openConversation,
-  onMoved(k, game) { rows.set(where.conv, game); if (k !== key()) go(k); if (game && seen) place.lock(game); },
+  onMoved(k, name) { rows.set(where.conv, name); if (k !== key()) go(k); if (name && seen) place.lock(name); },
   onGone: () => newConversation(),
 });
 $("new-conversation").addEventListener("click", () => newConversation());

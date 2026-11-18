@@ -3,8 +3,11 @@
 # The server runs in the home of the projects (~/LawEditor unless LAWEDITOR_HOME says otherwise). A project
 # is a folder: one made by LawEditor lives in that home, under its key; one opened from elsewhere on the
 # computer keeps its place, and the home's .folders file knows where it is (its key starts with "x-").
-# In a project: GDD.md (the sentences), TYPES.bend and LAWS.bend (the laws), game/ (what the chat builds),
-# and .laweditor/ (its name, its conversations, what was allowed, each turn's record).
+# In a project: its program, in .bend files (main.bend is where it starts; index.html when it has a page),
+# RULES.md (the person's rules, one sentence per line), LAWS.bend (their laws, which import the program),
+# and .laweditor/ (its name, its conversations, what was allowed, each turn's record, Bend's guide for
+# the chat to read, and the page as Bend last bundled it). LawEditor makes none of the first three: each
+# appears when there is something to put in it.
 
 import Base
 
@@ -106,3 +109,14 @@ def term_out(+dir: String) -> String:
 
 def term_in(+dir: String) -> String:
   dir ++ "/.laweditor/term.in"
+
+# Bend's guide, as the installed bend prints it: the chat reads it there (engine/TURN.bend writes it).
+def guide(+dir: String) -> String:
+  dir ++ "/.laweditor/GUIDE.md"
+
+# The project's page, as Bend last bundled it (engine/BUILD.bend). LawEditor's own place: it is emptied
+# before each bundle, and the pages door serves it (server.bend).
+def page_in() -> String: ".laweditor/page"
+
+def page(+dir: String) -> String:
+  dir ++ "/" ++ page_in()

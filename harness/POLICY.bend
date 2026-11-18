@@ -96,9 +96,9 @@ def can_ask(codex: Bool) -> Bool:
 def mode_told(m: Mode) -> String:
   match m:
     case Mode.OnlyRead{}:
-      "Only read. You may read the files. Never edit or create a file, and run no command. When they want something built or changed (also when they just say they want a game or an app, like \"I want a platform game\"), don't refuse and don't build: say in one short sentence that you can build it in Ask before changes, and end your reply with this line, exactly: MODE: \"Ask before changes\" (the app asks them to switch; never say it isn't your job)."
+      "Only read. You may read the files. Never edit or create a file, and run no command. When they want something built or changed (also when they just say they want a program, like \"I want a to-do list\"), don't refuse and don't build: say in one short sentence that you can build it in Ask before changes, and end your reply with this line, exactly: MODE: \"Ask before changes\" (the app asks them to switch; never say it isn't your job)."
     case Mode.AskBeforeChanges{}:
-      "Ask before changes. You may read the files. When the person asks for a change, make it with your tools; if it needs their yes, you are stopped and they are asked. When they ask for a game or an app, first write the smallest version they can play or use, then say how to open it and ask one question. Never change LAWS.bend."
+      "Ask before changes. You may read the files. When the person asks for a change, make it with your tools; if it needs their yes, you are stopped and they are asked. When they ask for a program, first write the smallest version that runs, in Bend, then say how to run it and ask one question. Never change LAWS.bend."
     case Mode.ChangeFreely{}:
       "Change freely. You may read, edit and create files. Never change LAWS.bend."
 
@@ -135,6 +135,80 @@ def tools(a: Agent) -> List<&2, AgentTool>:
       mode_tools(chat_mode())
     case Agent.LawAgent{}:
       [read(), edit(), write(), run_bend()]
+
+# ---------- What a project is made of ----------
+# LawEditor builds Bend. A file of a project is one of three kinds:
+#
+#   logic  a .bend file: the program itself. The laws talk about it, and Bend checks it.
+#   glue   what goes around the program: a command in shell, a setting, a text, an image, the host side of
+#          an effect, the page that only draws what Bend returns. Allowed; it holds no rule, and no law
+#          checks it.
+#   other  anything else: a program in another language. Not what LawEditor builds. The chat is told to
+#          say so, and the question the person gets before the file is written says so too.
+#
+# These two lists are the one place that says which file is which: to move a kind of file from one layer
+# to another, change it here. GATE.bend reads them for its question, the page for its marks, and
+# CHAT.md says the same in words.
+
+type Layer is Data:
+  Layer.Logic{}
+  Layer.Glue{}
+  Layer.Other{}
+
+# A file's kind is what comes after its last dot ("main.bend" is bend; "LICENSE", with no dot, is LICENSE).
+def logic_kinds() -> List<&2, String>:
+  ["bend"]
+
+def glue_kinds() -> List<&2, String>:
+  ["sh", "md", "txt", "json", "toml", "yaml", "yml", "html", "css", "js", "mjs", "c", "svg", "png", "webp", "jpg", "gif", "wav", "mp3", "ogg", "gitignore", "LICENSE", "Makefile"]
+
+def layer.at(logic: Bool, glue: Bool) -> Layer:
+  match logic glue:
+    case True{} _:
+      Layer.Logic{}
+    case False{} True{}:
+      Layer.Glue{}
+    case False{} False{}:
+      Layer.Other{}
+
+def layer_of(+kind: String) -> Layer:
+  layer.at(List.contains(~String, ~String.eq, logic_kinds(), kind), List.contains(~String, ~String.eq, glue_kinds(), kind))
+
+# Do the laws reach it? Only logic.
+def layer_checked(l: Layer) -> Bool:
+  match l:
+    case Layer.Logic{}:
+      True{}
+    case Layer.Glue{}:
+      False{}
+    case Layer.Other{}:
+      False{}
+
+# What the person reads about a file that isn't logic, where they are asked about it ("" for logic).
+def layer_note(l: Layer) -> String:
+  match l:
+    case Layer.Logic{}:
+      ""
+    case Layer.Glue{}:
+      "Not Bend: no law checks this file."
+    case Layer.Other{}:
+      "Not Bend, and not what LawEditor builds: a program in another language. No law checks it."
+
+# The same, in a word, beside a file's name ("" for logic).
+def layer_tag(l: Layer) -> String:
+  match l:
+    case Layer.Logic{}:
+      ""
+    case Layer.Glue{}:
+      "not checked"
+    case Layer.Other{}:
+      "not Bend"
+
+def note_of(+kind: String) -> String:
+  layer_note(layer_of(kind))
+
+def tag_of(+kind: String) -> String:
+  layer_tag(layer_of(kind))
 
 # ---------- The modes, for the page (it counts them 0, 1, 2) ----------
 

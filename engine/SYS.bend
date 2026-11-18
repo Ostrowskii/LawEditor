@@ -3,19 +3,25 @@
 import Base
 
 # ---------- Where the engine runs ----------
-# root: LawEditor's own folder (its page in dist/, what the AIs are told in harness/). port: where it listens.
+# root: LawEditor's own folder (its page in dist/, what the AIs are told in harness/). port: where it
+# listens. pages: the second port, where what the projects built is served (0 when there is none).
 type Ctx is Data:
-  Ctx{root: String, port: U32}
+  Ctx{root: String, port: U32, pages: U32}
 
 def root(cx: Ctx) -> String:
   match cx:
-    case Ctx{root, port}:
+    case Ctx{root, port, pages}:
       root
 
 def port(cx: Ctx) -> U32:
   match cx:
-    case Ctx{root, port}:
+    case Ctx{root, port, pages}:
       port
+
+def pages(cx: Ctx) -> U32:
+  match cx:
+    case Ctx{root, port, pages}:
+      pages
 
 # What an AI is told: AGENT.md (the law agent), CHAT.md and HEAR.md (the chat), HARNESS.md (its modes).
 def told(cx: Ctx, name: String) -> String:
@@ -23,6 +29,9 @@ def told(cx: Ctx, name: String) -> String:
 
 def address(cx: Ctx) -> String:
   "127.0.0.1:" ++ U32.show(port(cx))
+
+def pages_address(cx: Ctx) -> String:
+  "127.0.0.1:" ++ U32.show(pages(cx))
 
 # ---------- Text ----------
 

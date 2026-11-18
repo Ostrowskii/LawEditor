@@ -5,13 +5,15 @@
 #
 #   me      <text>                              the person wrote
 #   turn    <turn> <ai> <model> <mode>          the chat started answering
-#   reply   <turn> <text>                       its answer, whole (with its LAW:, MODE:, PLAN: and GAME: lines)
+#   reply   <turn> <text>                       its answer, whole (with its LAW:, MODE:, PLAN: and PROJECT: lines)
 #   fail    <turn> <why>                        it couldn't answer
 #   stopped <turn>                              the person stopped it
 #   ask     <question> <text>                   a question for the person (law-…, mode-…, gate-…)
 #   answer  <question> <word>                   what they answered
 #   note    <question> <state> <text>           what came of it (busy, ok, error, none)
-#   game    <key> <name>                        the conversation's game got its folder and name
+#   project <key> <name>                        the conversation's project got its folder and name
+#   check   <turn> <state> <text>               Bend checked the project after the turn changed it (ok, error)
+#   page    <turn> <state> <text>               Bend bundled the project's page (ok, warn, error)
 #   ran     <command> <code> <output>           a command the person ran themselves (!)
 #
 # Nothing is ever taken out: a window that has read n events asks for the ones after n.
@@ -156,17 +158,32 @@ def unlines(xs: List<&2, String>) -> String:
 def after(log: String, n: Nat) -> String:
   unlines(after.drop(lines(log), n))
 
+# What LawEditor itself tells the chat: Bend's word on the project, when it isn't plain good (an error of
+# the check, a page that couldn't be bundled, a page with no Bend in it). engine/BUILD.bend writes them.
+def is_told(+l: String) -> Bool:
+  ((is_a(l, "check") || is_a(l, "page")) && Bool.not(String.eq(field(l, 1n), "ok")))
+
+def told.text(check: Bool, +l: String) -> String:
+  match check:
+    case True{}:
+      "LawEditor: Bend checked the project after that reply and found an error. Fix it before anything else.\n" ++ String.take(field(l, 2n), 4000n)
+    case False{}:
+      "LawEditor: " ++ String.take(field(l, 2n), 4000n)
+
 # The conversation as the chat reads it: "Person: …" and "Agent: …", oldest first.
-# A command the person ran is part of the talk too: the chat reads what it printed.
-def talk.line(me: Bool, reply: Bool, ran: Bool, +l: String, rest: List<&2, String>) -> List<&2, String>:
-  match me reply ran:
-    case True{} _ _:
+# A command the person ran is part of the talk too: the chat reads what it printed. So is what Bend said
+# of the project ("LawEditor: …").
+def talk.line(me: Bool, reply: Bool, ran: Bool, told: Bool, +l: String, rest: List<&2, String>) -> List<&2, String>:
+  match me reply ran told:
+    case True{} _ _ _:
       ("Person: " ++ field(l, 0n)) <> rest
-    case False{} True{} _:
+    case False{} True{} _ _:
       ("Agent: " ++ field(l, 1n)) <> rest
-    case False{} False{} True{}:
+    case False{} False{} True{} _:
       ("Person: (ran the command `" ++ field(l, 0n) ++ "`; it printed:)\n" ++ String.take(field(l, 2n), 4000n)) <> rest
-    case False{} False{} False{}:
+    case False{} False{} False{} True{}:
+      told.text(is_a(l, "check"), l) <> rest
+    case False{} False{} False{} False{}:
       rest
 
 def talk.go(xs: List<&2, String>) -> List<&2, String>:
@@ -174,7 +191,7 @@ def talk.go(xs: List<&2, String>) -> List<&2, String>:
     case Nil{}:
       Nil{}
     case +h <> t:
-      talk.line(is_a(h, "me"), is_a(h, "reply"), is_a(h, "ran"), h, talk.go(t))
+      talk.line(is_a(h, "me"), is_a(h, "reply"), is_a(h, "ran"), is_told(h), h, talk.go(t))
 
 def talk(log: String) -> String:
   String.join(talk.go(lines(log)), "\n")
@@ -215,18 +232,18 @@ def first.go(xs: List<&2, String>, +k: String) -> String:
 def first(log: String, +k: String) -> String:
   first.go(lines(log), k)
 
-# The conversation's game: its name and its folder ("" while it has none).
-def game(+log: String) -> String:
-  field(last(log, "game"), 1n)
+# The conversation's project: its name and its folder ("" while it has none).
+def project(+log: String) -> String:
+  field(last(log, "project"), 1n)
 
-def game_key(+log: String) -> String:
-  field(last(log, "game"), 0n)
+def project_key(+log: String) -> String:
+  field(last(log, "project"), 0n)
 
-# The name the chat gave the game in any of its replies (its first GAME: line; "" if it gave none).
+# The name the chat gave the project in any of its replies (its first PROJECT: line; "" if it gave none).
 def named.pick(reply: Bool, +l: String, +later: String) -> String:
   match reply:
     case True{}:
-      first.pick(Bool.not(String.is_empty(Chat.game_name(field(l, 1n)))), Chat.game_name(field(l, 1n)), later)
+      first.pick(Bool.not(String.is_empty(Chat.project_name(field(l, 1n)))), Chat.project_name(field(l, 1n)), later)
     case False{}:
       later
 
@@ -248,16 +265,16 @@ def title(+log: String) -> String:
 def is_new(+log: String) -> Bool:
   (String.is_empty(first(log, "me")) && String.is_empty(first(log, "ran")))
 
-# The game's name when the chat gave none: the conversation's title, up to 40 characters.
-def game_or_title.at(+name: String, +log: String, none: Bool) -> String:
+# The project's name when the chat gave none: the conversation's title, up to 40 characters.
+def name_or_title.at(+name: String, +log: String, none: Bool) -> String:
   match none:
     case True{}:
       String.take(title(log), 40n)
     case False{}:
       name
 
-def game_or_title(+log: String) -> String:
-  game_or_title.at(named(log), log, String.is_empty(named(log)))
+def name_or_title(+log: String) -> String:
+  name_or_title.at(named(log), log, String.is_empty(named(log)))
 
 # ---------- What is going on ----------
 
@@ -306,10 +323,29 @@ def asking.at(+q: String, none: Bool, answered: Bool) -> String:
 def asking(+log: String) -> String:
   asking.at(field(last(log, "ask"), 0n), String.is_empty(last(log, "ask")), answered.go(lines(log), field(last(log, "ask"), 0n)))
 
+# What came of a question: its last note's state ("busy" while its law is being written; "" with no note).
+def noted.step(hit: Bool, +l: String, +found: String) -> String:
+  match hit:
+    case True{}:
+      field(l, 1n)
+    case False{}:
+      found
+
+def noted.go(xs: List<&2, String>, +q: String, +found: String) -> String:
+  match xs:
+    case Nil{}:
+      found
+    case +h <> t:
+      noted.go(t, q, noted.step((is_a(h, "note") && String.eq(field(h, 0n), q)), h, found))
+
+def noted(log: String, +q: String) -> String:
+  noted.go(lines(log), q, "")
+
 # ---------- What a server that stopped left behind ----------
 # The engine that waited for an answer, or ran a turn, is gone with the server. When the server starts,
 # each conversation gets the events that close what was open: a question nobody waits for anymore is
-# answered no, and a turn that was running failed. Without them the conversation would wait forever.
+# answered no, a turn that was running failed, and a law that was being written is said not to be.
+# Without them the conversation would wait forever.
 
 def no_word.at(heard: Bool, offer: Bool) -> String:
   match heard offer:
@@ -345,8 +381,38 @@ def left.turn(none: Bool, +turn: String) -> String:
     case False{}:
       event("fail", [turn, "LawEditor was closed while the chat was answering."])
 
+# A rule that was added, whose law was still being written: its last note says "busy".
+def law_busy(+l: String, +log: String) -> Bool:
+  (is_a(l, "note") && String.starts_with(field(l, 0n), "law-") && String.eq(field(l, 1n), "busy") && String.eq(noted(log, field(l, 0n)), "busy"))
+
+def left.law(busy: Bool, +q: String, rest: String) -> String:
+  match busy:
+    case True{}:
+      event("note", [q, "error", "Its law was not written: LawEditor was closed meanwhile. Generate it in Laws."]) ++ rest
+    case False{}:
+      rest
+
+def left.laws(xs: List<&2, String>, +log: String) -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case +h <> t:
+      left.law(law_busy(h, log), field(h, 0n), left.laws(t, log))
+
 def left(+log: String) -> String:
-  left.turn(String.is_empty(running(log)), running(log)) ++ left.go(lines(log), log)
+  left.turn(String.is_empty(running(log)), running(log)) ++ left.go(lines(log), log) ++ left.laws(lines(log), log)
+
+# Is a law being written now? The law agent may add a definition to the project's code, so the chat's
+# next turn waits for it (engine/TURN.bend): the two never write the same file at once.
+def writing.go(xs: List<&2, String>, +log: String) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case +h <> t:
+      (law_busy(h, log) || writing.go(t, log))
+
+def writing(+log: String) -> Bool:
+  writing.go(lines(log), log)
 
 # May the person write now? Not while the chat answers, and not while a question waits (CHAT.bend: can_send).
 def can_say(+log: String) -> Bool:
@@ -356,24 +422,6 @@ def can_say(+log: String) -> Bool:
 def idle() -> String: "idle"
 def working() -> String: "working"
 def waiting() -> String: "asking"
-
-# What came of a question: its last note's state ("busy" while its law is being written; "" with no note).
-def noted.step(hit: Bool, +l: String, +found: String) -> String:
-  match hit:
-    case True{}:
-      field(l, 1n)
-    case False{}:
-      found
-
-def noted.go(xs: List<&2, String>, +q: String, +found: String) -> String:
-  match xs:
-    case Nil{}:
-      found
-    case +h <> t:
-      noted.go(t, q, noted.step((is_a(h, "note") && String.eq(field(h, 0n), q)), h, found))
-
-def noted(log: String, +q: String) -> String:
-  noted.go(lines(log), q, "")
 
 # ---------- Hearing rules (HEAR.bend) ----------
 

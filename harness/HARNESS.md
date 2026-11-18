@@ -3,6 +3,23 @@
 What the chat may do, and when it asks. Works the same with any AI.
 The rules live in POLICY.bend; LAWS.bend checks them.
 
+## What it builds
+
+LawEditor builds Bend. A project's files are of three kinds (POLICY.bend holds the list):
+
+| Kind  | What it is                                                                   | Laws check it |
+|-------|------------------------------------------------------------------------------|---------------|
+| Logic | .bend files: the program itself                                              | Yes           |
+| Glue  | A command in shell, a setting, a text, the page that draws what Bend returns | No            |
+| Other | A program in another language                                                | No            |
+
+The chat writes logic in Bend and keeps glue free of rules. Another language is not what it builds:
+it says so, and the question before the file is written says so too. You decide.
+
+After a reply that changed the project, Bend checks every .bend file and bundles the page
+(BUILD.bend). The result shows in the conversation; with an error, the chat gets a turn to fix it.
+A page is opened at a second address (the pages door), apart from the app's own.
+
 ## Modes
 
 The person picks one under the message field. It starts on "Only read".

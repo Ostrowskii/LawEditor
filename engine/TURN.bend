@@ -1,6 +1,6 @@
-# LawEditor's engine: a conversation's turn. The person writes; the chat answers; the engine asks what
-# has to be asked (a law it heard, the mode it offers, an action that needs a yes), writes the laws, and
-# keeps every step as an event (harness/EVENTS.bend). A window only sends what the person wrote or
+# LawEditor's engine: a conversation's turn. The person writes; the chat answers; the engine has Bend
+# check what the chat changed (BUILD.bend), asks what has to be asked (a law it heard, the mode it offers,
+# an action that needs a yes), writes the laws, and keeps every step as an event (harness/EVENTS.bend). A window only sends what the person wrote or
 # answered, and draws the events: the page and the terminal show the same conversation.
 #
 # The rules of each step are in harness/ (HEAR, OFFER, GATE, POLICY, CHAT); this file runs them in order.
@@ -10,6 +10,7 @@ import ./SYS.bend as Sys
 import ./PLACES.bend as Places
 import ./PROJECTS.bend as Proj
 import ./LAW.bend as Law
+import ./BUILD.bend as Build
 import ../harness/EVENTS.bend as Ev
 import ../harness/POLICY.bend as Policy
 import ../harness/ASK.bend as Ask
@@ -157,9 +158,9 @@ def mode_told(asks: Bool) -> String:
 
 # What the chat is told: CHAT.md, its mode, its skill (HEAR.md), then the conversation so far.
 def prompt(+w: Talk, rules: String, skill: String, +log: String, extra: String) -> String:
-  rules ++ "\n\n" ++ mode_told(asks(w)) ++ "\n\n" ++ skill ++ "\n\n## Chat\n\n" ++ Chat.with_game(Ev.talk(log), Ev.game(log)) ++ extra
+  rules ++ "\n\n" ++ mode_told(asks(w)) ++ "\n\n" ++ skill ++ "\n\n## Chat\n\n" ++ Chat.with_project(Ev.talk(log), Ev.project(log)) ++ extra
 
-# ---------- A game is born ----------
+# ---------- A project is born ----------
 
 def promoted.at(none: Bool, +w: Talk, +key2: String, +name: String) -> IO(Talk):
   match none:
@@ -167,7 +168,7 @@ def promoted.at(none: Bool, +w: Talk, +key2: String, +name: String) -> IO(Talk):
       IO.pure(Talk, w)
     case False{}:
       do IO<Talk>:
-        emit(moved(w, key2, key2), Ev.event("game", [key2, name]))
+        emit(moved(w, key2, key2), Ev.event("project", [key2, name]))
         return moved(w, key2, key2)
 
 def promoted.try(draft: Bool, +w: Talk, +log: String) -> IO(Talk):
@@ -176,24 +177,64 @@ def promoted.try(draft: Bool, +w: Talk, +log: String) -> IO(Talk):
       IO.pure(Talk, w)
     case True{}:
       do IO<Talk>:
-        +key2 : String <- Proj.promote(key(w), Ev.game_or_title(log))
-        promoted.at(String.is_empty(key2), w, key2, Ev.game_or_title(log))
+        +key2 : String <- Proj.promote(key(w), Ev.name_or_title(log))
+        promoted.at(String.is_empty(key2), w, key2, Ev.name_or_title(log))
 
-# A conversation with no game becomes one once it has a sentence or a file: named by the chat (its GAME:
-# line), or by the person's first message. Its folder takes the name, so the talk goes on from there.
+# A conversation with no project becomes one once it has a rule or a file: named by the chat (its
+# PROJECT: line), or by the person's first message. Its folder takes the name, so the talk goes on from there.
 def promoted(+w: Talk) -> IO(Talk):
   do IO<Talk>:
     +log : String <- log_of(w)
-    promoted.try((String.eq(key(w), conv(w)) && String.is_empty(Ev.game(log))), w, log)
+    promoted.try((String.eq(key(w), conv(w)) && String.is_empty(Ev.project(log))), w, log)
+
+# ---------- Bend checks what the turn changed (BUILD.bend) ----------
+
+# One run's event, when it had something to say. Answers whether it failed.
+def built.said(ran: Bool, +w: Talk, +kind: String, +turn: String, +out: String) -> IO(Bool):
+  match ran:
+    case False{}:
+      IO.pure(Bool, False{})
+    case True{}:
+      do IO<Bool>:
+        emit(w, Ev.event(kind, [turn, Build.state(out), Build.text(out)]))
+        return Build.failed(out)
+
+# The page is bundled only when the check found no error: with one, the bundle would say it again.
+def built.page(broke: Bool, +w: Talk, +turn: String) -> IO(Bool):
+  match broke:
+    case True{}:
+      IO.pure(Bool, True{})
+    case False{}:
+      do IO<Bool>:
+        +out : String <- Build.page(dir(w))
+        built.said(Build.ran(out), w, "page", turn, out)
+
+def built.at(acted: Bool, +w: Talk, +turn: String) -> IO(Bool):
+  match acted:
+    case False{}:
+      IO.pure(Bool, False{})
+    case True{}:
+      do IO<Bool>:
+        +out : String <- Build.check(dir(w))
+        +broke : Bool <- built.said(Build.ran(out), w, "check", turn, out)
+        built.page(broke, w, turn)
+
+# After a reply that acted on the project (ASK.acted: an edit, a new file, a command that ran), Bend
+# checks its .bend files and bundles its page. Answers whether Bend found an error: the chat then gets
+# another turn to fix it (step, below).
+def built(+w: Talk, +turn: String) -> IO(Bool):
+  do IO<Bool>:
+    out : String <- Sys.read_file(Places.turn(dir(w), turn))
+    built.at(Ask.acted(out), w, turn)
 
 # ---------- The laws it heard (HEAR.bend) ----------
 
 def law_question(+turn: String, +i: Nat) -> String:
   "law-" ++ turn ++ "-" ++ Nat.show(i)
 
-# The sentence goes to the end of GDD.md, on a line of its own.
+# The sentence goes to the end of RULES.md, on a line of its own.
 def add_sentence(+w: Talk, sentence: String) -> IO(String):
-  Sys.sh("f=\"$0/GDD.md\"; [ -s \"$f\" ] && [ -n \"$(tail -c 1 \"$f\")\" ] && echo >> \"$f\"; printf '%s\\n' \"$1\" >> \"$f\"", [dir(w), sentence], 5000)
+  Sys.sh("f=\"$0/RULES.md\"; [ -s \"$f\" ] && [ -n \"$(tail -c 1 \"$f\")\" ] && echo >> \"$f\"; printf '%s\\n' \"$1\" >> \"$f\"", [dir(w), sentence], 5000)
 
 def hear.said(adds: Bool, +w: Talk, +q: String, sentence: String) -> IO(Unit):
   match adds:
@@ -221,9 +262,9 @@ def hear.new(is_new: Bool, must_ask: Bool, +w: Talk, +q: String, +sentence: Stri
 
 def hear.one(+w: Talk, +q: String, +sentence: String) -> IO(Unit):
   do IO<Unit>:
-    gdd : String <- Sys.read_file(dir(w) ++ "/GDD.md")
+    rules : String <- Sys.read_file(dir(w) ++ "/RULES.md")
     +log : String <- log_of(w)
-    hear.new(Hear.is_new(sentence, gdd ++ "\n" ++ Ev.heard(log)), Hear.must_ask(Ev.hear_mode(log)), w, q, sentence)
+    hear.new(Hear.is_new(sentence, rules ++ "\n" ++ Ev.heard(log)), Hear.must_ask(Ev.hear_mode(log)), w, q, sentence)
 
 # Every sentence the reply proposes (its LAW: lines), one question at a time, in order.
 def hear(n: Nat, +i: Nat, +w: Talk, +turn: String, +answer: String) -> IO(Unit):
@@ -292,28 +333,31 @@ def offer(+w: Talk, +turn: String, answer: String) -> IO(Bool):
 
 # ---------- One turn ----------
 # What comes after a turn: go on with another (the person switched the mode: the chat builds what it
-# offered), or stop.
+# offered; or Bend found an error in what the chat wrote: the chat reads it in the talk and fixes it), or stop.
 type Step is Data:
   Step{again: Bool, talk: Talk, extra: String}
 
-def step(switched: Bool, +w: Talk) -> Step:
-  match switched:
-    case True{}:
+def step(switched: Bool, broke: Bool, +w: Talk) -> Step:
+  match switched broke:
+    case True{} _:
       Step{True{}, in_mode(w, Policy.mode_index(Policy.Mode.AskBeforeChanges{})), "\n" ++ Offer.told()}
-    case False{}:
+    case False{} True{}:
+      Step{True{}, w, ""}
+    case False{} False{}:
       Step{False{}, w, ""}
 
-# The chat answered. In order: its game, if this made one; the laws it heard; the mode it offers; then the
-# laws are written, without holding the talk.
+# The chat answered. In order: its project, if this made one; Bend's check of what it changed; the laws
+# it heard; the mode it offers; then the laws are written, without holding the talk.
 def replied(+w: Talk, +turn: String, +answer: String) -> IO(Step):
   do IO<Step>:
     emit(w, Ev.event("reply", [turn, answer]))
     +w2 : Talk <- promoted(w)
+    +broke : Bool <- built(w2, turn)
     hear(Hear.count(answer), 0n, w2, turn, answer)
     +w3 : Talk <- promoted(w2)
     +switched : Bool <- offer(w3, turn, answer)
     IO.spawn(Unit, laws(Hear.count(answer), 0n, w3, turn, answer))
-    return step(switched, w3)
+    return step(switched, broke, w3)
 
 def answer_of.at(codex: Bool, +out: String) -> String:
   match codex:
@@ -342,11 +386,32 @@ def ended(+w: Talk, +turn: String, agent: U32 & String, +stopped: String) -> IO(
   (+code, +out) = agent
   ended.at(Bool.not(String.is_empty(stopped)), U32.is_eq(code, 127), w, turn, out)
 
+# The law agent may add a definition to the project's code (AGENT.md), and so may the chat: a turn waits
+# while a law is being written (EVENTS.writing), up to the law agent's own time limit and a little more.
+def calm(fuel: Nat, busy: Bool, +w: Talk) -> IO(Unit):
+  match fuel busy:
+    case 0n _:
+      IO.pure(Unit, Unit{})
+    case 1n+f False{}:
+      IO.pure(Unit, Unit{})
+    case 1n+f True{}:
+      do IO<Unit>:
+        IO.sleep(300)
+        +log : String <- log_of(w)
+        calm(f, Ev.writing(log), w)
+
+# Bend's guide, as the installed bend prints it, where the chat can read it without asking (PLACES.guide).
+def guide(+w: Talk) -> IO(String):
+  Sys.sh("bend guide > \"$0\" 2>/dev/null; true", [Places.guide(dir(w))], 20000)
+
 def one(+w: Talk, extra: String) -> IO(Step):
   do IO<Step>:
     +turn : String <- Sys.new_id()
     emit(w, Ev.event("turn", [turn, ai(w), model(w), U32.show(mode(w))]))
     state(w, Ev.working())
+    +before : String <- log_of(w)
+    calm(2400n, Ev.writing(before), w)
+    wrote : String <- guide(w)
     rules : String <- Sys.read_file(Sys.told(cx(w), "CHAT.md"))
     skill : String <- Sys.read_file(Sys.told(cx(w), "HEAR.md"))
     +log : String <- log_of(w)
@@ -434,7 +499,7 @@ def talk_of(+cx: Sys.Ctx, +key: String, +dir: String, +conv: String, +head: Stri
 def say.read(+cx: Sys.Ctx, +key: String, +dir: String, +conv: String, +head: String, +text: String) -> IO(String):
   say.in((String.is_empty(dir) || String.is_empty(String.trim(text)) || Bool.not(is_ai(Sys.nth(String.split(head, Ev.tab()), 0n)))), talk_of(cx, key, dir, conv, head), text)
 
-# POST /api/c/<key>/<conversation>/say. A conversation with no game names itself as its project (its key
+# POST /api/c/<key>/<conversation>/say. A conversation with no project names itself as one (its key
 # is its own name): it gets its folder here, with nothing asked. Answers "ok" and the project's key,
 # "busy" while the chat answers or a question waits, "unknown" for a project that isn't there.
 def say(+cx: Sys.Ctx, +key: String, +conv: String, +body: String) -> IO(String):
@@ -557,13 +622,13 @@ def events(+dir: String, +conv: String, n: Nat) -> IO(String):
     return Ev.after(log, n)
 
 # GET /api/c/<key>/<conversation>/now: what goes on, read from the conversation by EVENTS.bend: the turn
-# that runs, the question that waits and the game's name, split by tabs (each empty when there is none).
+# that runs, the question that waits and the project's name, split by tabs (each empty when there is none).
 # A window asks this instead of reading the whole conversation itself: the answer is short however long
 # the conversation got.
 def now(+dir: String, +conv: String) -> IO(String):
   do IO<String>:
     +log : String <- Sys.read_file(Places.log(dir, conv))
-    return Ev.running(log) ++ SCon{Ev.tab(), Ev.asking(log) ++ SCon{Ev.tab(), Ev.game(log)}}
+    return Ev.running(log) ++ SCon{Ev.tab(), Ev.asking(log) ++ SCon{Ev.tab(), Ev.project(log)}}
 
 # POST /api/c/<key>/<conversation>/answer/<question>, body: the answer's word. The engine, which waits,
 # reads it and writes the event.
@@ -578,7 +643,7 @@ def answer(+dir: String, +conv: String, +q: String, word: String) -> IO(String):
 # as any other question of the conversation.
 
 def gate_talk(+dir: String, +conv: String) -> Talk:
-  Talk{Sys.Ctx{"", 0}, "", dir, conv, "claude", "", 1}
+  Talk{Sys.Ctx{"", 0, 0}, "", dir, conv, "claude", "", 1}
 
 def mcp.heard(+w: Talk, +q: String, +msg: String, +session: String, +said: String) -> IO(String):
   do IO<String>:
