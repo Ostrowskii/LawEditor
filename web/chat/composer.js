@@ -3,7 +3,7 @@
 // Typing / at the start lists the commands (CHAT.bend's commands); typing @ lists the project's files
 // (GET /api/files), and a picked file becomes a chip above the text (.composer__chips). The message goes out
 // with its files: onSend(text, files).
-import C from "../../CHAT.bend";
+import C from "../../harness/CHAT.bend";
 
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 

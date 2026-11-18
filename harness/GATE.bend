@@ -9,7 +9,7 @@
 import Base
 import ./ASK.bend as Ask
 import ./POLICY.bend as P
-import ./FLOW.bend as F
+import ../flows/FLOW.bend as F
 
 # ---------- Reading a message ----------
 

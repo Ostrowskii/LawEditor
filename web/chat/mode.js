@@ -4,8 +4,8 @@
 // In a mode that asks, the menu also shows what the person allowed for this conversation (GATE.bend:
 // the allowed_* functions read the server's file; GET/POST /api/allowed/<conversation>): newest first,
 // found in with Find…, taken back one by one (×) or all. The button carries the count.
-import P from "../../POLICY.bend";
-import G from "../../GATE.bend";
+import P from "../../harness/POLICY.bend";
+import G from "../../harness/GATE.bend";
 
 const icon = (n) => `<svg class="icon" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 

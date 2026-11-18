@@ -3,11 +3,11 @@
 
 import Base
 import ./EDITOR.bend as E
-import ./POLICY.bend as P
-import ./HEAR.bend as H
-import ./CHAT.bend as C
-import ./FLOW.bend as F
-import ./OFFER.bend as O
+import ./harness/POLICY.bend as P
+import ./harness/HEAR.bend as H
+import ./harness/CHAT.bend as C
+import ./flows/FLOW.bend as F
+import ./harness/OFFER.bend as O
 
 # LAW: a title never gets a state.
 law title_stays_title:

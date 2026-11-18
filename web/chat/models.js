@@ -1,7 +1,7 @@
 // The AI and its model: two Bend-UI dropdowns under the composer. Picking the AI asks the server for its
 // models (GET /api/models/<ai>: the server asks that AI's CLI; MODELS.bend reads the answer).
 // The list's states come from CHAT.bend.
-import C from "../../CHAT.bend";
+import C from "../../harness/CHAT.bend";
 
 const AIS = [["claude", "Claude"], ["codex", "Codex"]];
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

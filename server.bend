@@ -1,16 +1,16 @@
 # LawEditor server. Run it from your project folder:
 #
-#   bend /path/to/LawEditor/server.bend /path/to/LawEditor/dist /path/to/LawEditor/AGENT.md
+#   bend /path/to/LawEditor/server.bend /path/to/LawEditor/dist /path/to/LawEditor/harness/AGENT.md
 #
 # It serves the editor, keeps the project's files (GDD.md, TYPES.bend, LAWS.bend)
 # in the folder it runs from, and runs the agent (claude or codex) there.
 
 import Base
-import ./MODELS.bend as Models
-import ./POLICY.bend as Policy
-import ./ASK.bend as Ask
-import ./GATE.bend as Gate
-import ./CHAT.bend as Chat
+import ./harness/MODELS.bend as Models
+import ./harness/POLICY.bend as Policy
+import ./harness/ASK.bend as Ask
+import ./harness/GATE.bend as Gate
+import ./harness/CHAT.bend as Chat
 
 # ---------- Text ----------
 
@@ -221,7 +221,7 @@ def hear_md(+agent_md: String) -> String:
 
 # Debug: LawEditor's own files live there too (LAWS.bend, PROOF.bend). The page shows them as they are.
 def editor_file(+agent_md: String, name: String) -> String:
-  String.reverse(String.drop(String.reverse(agent_md), String.length("AGENT.md"))) ++ name
+  String.reverse(String.drop(String.reverse(agent_md), String.length("harness/AGENT.md"))) ++ name
 
 def debug_check.out(r: U32 & String) -> String:
   (code, out) = r

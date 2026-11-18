@@ -4,7 +4,7 @@
 
 import Base
 import ./FLOW.bend as F
-import ./POLICY.bend as P
+import ../harness/POLICY.bend as P
 
 def modes() -> String:
   String.join([P.mode_name(0), P.mode_name(1), P.mode_name(2)], " / ")

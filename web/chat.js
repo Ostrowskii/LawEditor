@@ -1,12 +1,12 @@
 // LawEditor: the Chat tab. Its logic is CHAT.bend; each part in web/chat/ draws itself; this file wires them
 // and talks to the server. It only adds a view: main.js keeps the other views.
-import C from "../CHAT.bend";
-import H from "../HEAR.bend";
+import C from "../harness/CHAT.bend";
+import H from "../harness/HEAR.bend";
 import E from "../EDITOR.bend";
-import P from "../POLICY.bend";
-import O from "../OFFER.bend";
-import G from "../GATE.bend";
-import A from "../ASK.bend";
+import P from "../harness/POLICY.bend";
+import O from "../harness/OFFER.bend";
+import G from "../harness/GATE.bend";
+import A from "../harness/ASK.bend";
 import { mountDiagram } from "bend-ui/diagram";
 import { createMessages } from "./chat/messages.js";
 import { createFace } from "./chat/face.js";

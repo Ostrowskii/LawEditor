@@ -1,7 +1,7 @@
 // Chat messages: draws them. The agent's reply goes through CHAT.bend's phases: reading, writing, done.
 // While it works, the reply shows what ASK.bend reads from the turn (GET /api/work/<id>): its actions
 // (.tools), its plan (.plan), what it does now (.working) and, at the end, the files it changed (.changes).
-import C from "../../CHAT.bend";
+import C from "../../harness/CHAT.bend";
 import { busy, done as doneBtn } from "bend-ui";
 import { markdown } from "../markdown.js";
 import { codeBlock } from "bend-ui/syntax";

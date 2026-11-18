@@ -8,7 +8,7 @@
 # The flow below is the source of the diagram, and LAWS.bend checks it.
 
 import Base
-import ./FLOW.bend as F
+import ../flows/FLOW.bend as F
 import ./POLICY.bend as P
 
 # ---------- The chat's reply ----------

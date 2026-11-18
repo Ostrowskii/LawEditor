@@ -8,11 +8,11 @@
 
 import Base
 import ./FLOW.bend as F
-import ./HEAR.bend as H
-import ./OFFER.bend as O
+import ../harness/HEAR.bend as H
+import ../harness/OFFER.bend as O
 import ./ARCH.bend as A
 import ./PERMIT.bend as Pm
-import ./GATE.bend as G
+import ../harness/GATE.bend as G
 
 # ---------- Mermaid text ----------
 

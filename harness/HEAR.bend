@@ -8,7 +8,7 @@
 #   Nothing reaches the document without the person's answer (LAWS.bend proves it).
 
 import Base
-import ./FLOW.bend as F
+import ../flows/FLOW.bend as F
 
 # ---------- The chat's reply ----------
 
