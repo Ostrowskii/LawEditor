@@ -8,6 +8,7 @@ import O from "../harness/OFFER.bend";
 import G from "../harness/GATE.bend";
 import A from "../harness/ASK.bend";
 import Ev from "../harness/EVENTS.bend";
+import { announce } from "bend-ui";
 import { mountDiagram } from "bend-ui/diagram";
 import { highlight } from "bend-ui/syntax";
 import { createMessages } from "./chat/messages.js";
@@ -89,7 +90,9 @@ function question(q, text, open) {
     card = messages.card(title, code ? { code, lang, name } : "", "dot dot--warning");
   }
   cards.set(q, card);
-  if (open) card.ask(ANSWERS[kind]).then((word) => post(conversation(`answer/${q}`), word));
+  if (!open) return;
+  announce("The chat asks: " + text.split("\n")[0]);   // said to who can't see the card arrive
+  card.ask(ANSWERS[kind]).then((word) => post(conversation(`answer/${q}`), word));
 }
 
 // One event. old: it is read from a conversation opened again (no motion, nothing waits).

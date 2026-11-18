@@ -61,7 +61,7 @@ let running = false;
 function makeBlock(kind = "text", text = "", after = null) {
   const pair = document.createElement("div");
   pair.className = "pair";
-  pair.innerHTML = '<div class="block line"><div class="block__slot"></div><div class="block__text" contenteditable="true"></div></div><div class="block pair__aside"></div>';
+  pair.innerHTML = '<div class="block line"><div class="block__slot"></div><div class="block__text" contenteditable="true"></div></div><div class="block block--still pair__aside"></div>';
   const b = pair.firstChild;
   b.style.setProperty("--block-min-lines", E.min_lines(E.sentence()));
   pair.lastChild.style.setProperty("--block-min-lines", E.min_lines(E.law_block()));
@@ -316,7 +316,7 @@ function renderLaws() {
   for (const l of laws) {
     const orphan = !inDoc.has(l.sentence);   // its sentence was deleted: keep the law, flag it
     const b = document.createElement("div");
-    b.className = "block";
+    b.className = "block block--still";   // only read here: nothing to pick
     b.innerHTML = `<div class="block__slot"><span class="dot ${orphan ? "dot--warning" : "dot--success"}"></span></div><div class="block__text"></div><pre class="block__out"></pre>`;
     b.querySelector(".block__text").textContent = l.sentence + (orphan ? "  (sentence deleted)" : "");
     b.querySelector(".block__out").textContent = l.code.split("\n").slice(1).join("\n");
@@ -389,7 +389,7 @@ function setView(v, show = true) {
   if (VIEW_CLASS[v]) docView = v;
   if (VIEW_CLASS[v]) { doc.classList.remove("doc--stack", "doc--split", "doc--wide"); doc.classList.add(...VIEW_CLASS[v]); }
   $("view").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.view === v));
-  for (const b of [$("files-btn"), $("context-btn")]) b.dataset.view === v ? b.setAttribute("aria-current", "true") : b.removeAttribute("aria-current");
+  for (const b of [$("files-btn"), $("context-btn")]) b.setAttribute("aria-pressed", String(b.dataset.view === v));
   try { localStorage.setItem("laweditor.view", v); } catch {}
   if (!show) return;
   for (const s of ["doc", "laws", "context"]) $("view-" + s).hidden = s !== VIEW_SECTION[v];

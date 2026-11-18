@@ -1,4 +1,4 @@
-// The chat's start (Bend-UI .chat__start): while the chat is empty (CHAT.bend: is_start), the agent's big face
+// The chat's start (Bend-UI .chat__start): while the conversation has nothing in it, the agent's big face
 // and the composer sit in the middle. The first message sends the composer back under the page with a glide
 // (a fade, with no travel, when the person asks for less motion) and hands the face's place to the first reply.
 import { mountAgent } from "bend-ui/agent";
@@ -14,7 +14,7 @@ export function createStart(page, form) {
   start.innerHTML = "<div><div></div></div>";
   page.prepend(start);
   start.append(form);
-  const face = mountAgent(start.firstChild.firstChild, { size: "lg", items: [] });
+  const face = mountAgent(start.firstChild.firstChild, { size: "lg", items: [], still: true });   // it only looks: nothing opens
 
   return {
     show(visible) { start.hidden = !visible; },

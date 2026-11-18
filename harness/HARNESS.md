@@ -23,9 +23,22 @@ Stay changes nothing. The flow is drawn in Chat › Context, from OFFER.flow().
 
 ## When it asks
 
-The chat tries; what its mode doesn't allow is refused, and it says what it wanted.
-The person answers: Allow, Always allow (this session), or Don't allow.
-Until they answer, the talk waits. Then the same conversation goes on (ASK.bend).
+In Ask before changes, before an action that isn't reading, the chat knocks at the gate with the
+whole action (GATE.bend) and waits. A law refuses, the mode refuses, what was allowed for this
+conversation passes; otherwise the person is asked: Allow, Allow for this session, or Don't allow.
+Until they answer, the turn waits, with no time limit. Nothing is tried twice.
+
+## What is yours
+
+A message that starts with ! is a command you run yourself, in the project's folder. Nothing is
+asked, since you are the one asking; a mode that only reads runs none. The chat reads what it printed.
+The terminal under the chat is your own shell. The chat neither sees it nor types in it.
+
+## One engine
+
+The page and the terminal (laweditor) are windows on the same engine: the conversation, its
+questions and what was allowed live in the server, kept with the project. What is done in one
+shows in the other.
 
 ## Checked by
 

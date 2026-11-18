@@ -184,7 +184,7 @@ def mode_can_pick.of(m: Mode, codex: Bool) -> Bool:
 def mode_can_pick(i: U32, codex: Bool) -> Bool:
   mode_can_pick.of(mode_at(i), codex)
 
-# Does the mode at i ask? (The page sends the chat to /api/ask then.)
+# Does the mode at i ask? (The engine then runs the chat that asks: engine/TURN.bend, asks.)
 def mode_asks_at(i: U32) -> Bool:
   mode_asks(mode_at(i))
 

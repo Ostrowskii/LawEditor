@@ -36,7 +36,7 @@ export function createMessages(list, page, at) {
     const before = (el) => body.insertBefore(el, text.isConnected ? text : working);
     const say = (s) => { if (!text.isConnected) body.insertBefore(text, working); text.textContent = s; };
     // The work so far, as ASK.bend wrote it: one line each, T (action), P (plan step), C (file), H (files' title), W (now).
-    // turn: the turn's id, so an action can show what it answered (GET /api/output/<turn>/<n>) when opened.
+    // turn: the turn's id, so an action can show what it answered (at.output(turn, n)) when opened.
     // Answers how much context the turn used (percent), or null.
     function work(lines, turn) {
       const rows = lines.split("\n").filter(Boolean).map((l) => l.split("\t"));

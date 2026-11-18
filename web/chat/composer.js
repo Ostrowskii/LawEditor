@@ -32,13 +32,14 @@ export function createComposer(form, { onSend, onStop, onCommand, files: listFil
   }
   async function suggest() {
     const v = text.value, at = word();
-    if (/^\/\S*$/.test(v)) { kind = "/"; list = commands.filter(([c]) => c.startsWith(v)); }
+    if (/^\/\S*$/.test(v)) { kind = "/"; list = commands.filter(([c]) => c.startsWith(v) || (v === "/" && c === "!")); }
     else if (at !== null) { kind = "@"; projectFiles = await listFiles(); list = projectFiles.filter((f) => f.toLowerCase().includes(at.toLowerCase()) && !files.includes(f)).slice(0, 8).map((f) => [f, ""]); }
     else return close();
     pick = 0; draw();
   }
   function choose(i) {
     const [name] = list[i] || []; if (!name) return;
+    if (kind === "/" && name === "!") { text.value = "!"; close(); sync(); text.focus(); return; }   // goes on typing the command
     if (kind === "/") { text.value = ""; close(); sync(); onCommand(name); return; }
     files.push(name); chips();
     const pos = text.selectionStart, before = text.value.slice(0, pos).replace(/@[^\s@]*$/, "");

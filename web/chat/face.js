@@ -8,7 +8,7 @@ export function createFace() {
     // from: where the face was (the start's big face), when it isn't beside an earlier reply.
     to(slot, from = pet && pet.face.getBoundingClientRect()) {
       if (pet) pet.destroy();
-      pet = mountAgent(slot, { size: "sm", items: [] });
+      pet = mountAgent(slot, { size: "sm", items: [], still: true });   // it only looks: nothing opens
       if (from && from.width) flyBetween(from, pet);
     },
     lookAt(el) { pet?.lookAtEl(el); },

@@ -221,7 +221,7 @@ def result_or(+out: String) -> String:
 # output, its plan (PLAN: lines in its text), the files it changed (Edit and Write, lines added and removed),
 # what it does now, and how much of its context it used. The page draws it with Bend-UI's .tools, .plan,
 # .changes, .working and .meter; one line each, fields split by tabs:
-#   T  kind  tone  what  detail   an action, in order (its output: GET /api/output/<turn>/<n>)
+#   T  kind  tone  what  detail   an action, in order (its output: the conversation's output/<turn>/<n>)
 #   P  status  text               a step of the plan: done, now or next
 #   C  file  added  removed       a file changed, once per file
 #   H  title                      the title over the files changed ("3 files changed")
