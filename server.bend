@@ -38,6 +38,34 @@ def req_body.at(s: String, here: Bool) -> String:
 def req_body(+s: String) -> String:
   req_body.at(s, String.starts_with(s, "\r\n\r\n"))
 
+# A header of the request ("" if it has none). Only the lines before the blank one are headers: what
+# comes after is the body, and a body can say anything.
+def header.pick(blank: Bool, hit: Bool, +h: String, +name: String, later: String) -> String:
+  match blank hit:
+    case True{} _:
+      ""
+    case False{} True{}:
+      String.trim(String.drop(h, String.length(name)))
+    case False{} False{}:
+      later
+
+def header.go(ls: List<&2, String>, +name: String) -> String:
+  match ls:
+    case Nil{}:
+      ""
+    case +h <> t:
+      header.pick(String.is_empty(String.trim(h)), String.starts_with(String.to_lower(h), name), h, name, header.go(t, name))
+
+def header(req: String, +name: String) -> String:
+  header.go(String.lines(req), name)
+
+# Only this computer's own windows may ask. A page of another site, open in the same browser, could
+# otherwise send requests here (and this server runs commands): the browser names where a request comes
+# from (Origin), and a request named by another site is refused. A request must also be addressed to this
+# server by its own name (Host), so no outside name can be pointed at it. The terminal sends no Origin.
+def is_ours(+origin: String, +host: String, +address: String, +port: String) -> Bool:
+  ((String.is_empty(origin) || String.eq(origin, "http://" ++ address) || String.eq(origin, "http://localhost:" ++ port)) && (String.eq(host, address) || String.eq(host, "localhost:" ++ port)))
+
 # ---------- An answer ----------
 
 def content_type(+path: String) -> String:
@@ -327,8 +355,15 @@ def route.at(is_post: Bool, +cx: Sys.Ctx, +req: String) -> IO(String):
     case False{}:
       route_get(cx, Ev.after.drop(String.split(req_word(req, 1n), '/'), 1n), req_word(req, 1n))
 
+def route.ours(ours: Bool, +cx: Sys.Ctx, +req: String) -> IO(String):
+  match ours:
+    case True{}:
+      route.at(String.eq(req_word(req, 0n), "POST"), cx, req)
+    case False{}:
+      IO.pure(String, http("403 Forbidden", "text/plain; charset=utf-8", "This server only answers its own page and terminal."))
+
 def route(+cx: Sys.Ctx, +req: String) -> IO(String):
-  route.at(String.eq(req_word(req, 0n), "POST"), cx, req)
+  route.ours(is_ours(header(req, "origin:"), header(req, "host:"), Sys.address(cx), U32.show(Sys.port(cx))), cx, req)
 
 # ---------- Connections ----------
 

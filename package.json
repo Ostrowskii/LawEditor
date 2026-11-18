@@ -7,9 +7,10 @@
     "bend-ui": "github:isabellaherman/Bend-UI#main"
   },
   "scripts": {
-    "check": "bend PROOF.bend && bend server.bend --check-only",
+    "check": "bend PROOF.bend && bend server.bend --check-only && bend cli.bend --check-only",
     "build": "bend web/index.html -o dist",
     "server": "bend server.bend -o dist/laweditor-server",
-    "start": "bun run build && bun run server && ./start.sh"
+    "start": "bun run build && bun run server && bun run cli && ./start.sh",
+    "cli": "bend cli.bend -o dist/laweditor"
   }
 }
