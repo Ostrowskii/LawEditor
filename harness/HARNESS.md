@@ -27,6 +27,8 @@ In Ask before changes, before an action that isn't reading, the chat knocks at t
 whole action (GATE.bend) and waits. A law refuses, the mode refuses, what was allowed for this
 conversation passes; otherwise the person is asked: Allow, Allow for this session, or Don't allow.
 Until they answer, the turn waits, with no time limit. Nothing is tried twice.
+The question shows in the message box's place, with what would change; the conversation keeps one
+line of what was answered. A refused action is marked "not run" and changes no count of files.
 
 ## What is yours
 

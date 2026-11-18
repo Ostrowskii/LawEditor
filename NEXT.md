@@ -20,15 +20,21 @@ Not built. The artifact drew three options: chats side by side, led by you (buil
 
 ## The chat's composition
 
-Not decided. The pieces of the chat (plan, action, working line, question, files changed) were each approved alone; together they stack without relating. A real conversation was driven and measured on 2026-11-18, and the artifact "LawEditor Chat Composition" (https://claude.ai/artifact/G3nS9UssNQ9ssxRHg24SdD) shows today beside three adjustments: A, one ruler (a turn is rows of two columns, a mark and the text); B, a thread through the turn's marks; C, the ruler plus the question in the message box's place and a finished turn folding its work. Recommended: A first, then what C adds. Each needs a new piece in Bend-UI (additions only), shown in the lib's docs page first.
+Built on 2026-11-18 from the artifact "LawEditor Chat Composition" (https://claude.ai/artifact/G3nS9UssNQ9ssxRHg24SdD): adjustment A (one ruler: a turn is rows of two columns, a mark and the text) and what C adds (the question in the message box's place; a finished reply folds its work). On the branch `chat-composition`, with Bend-UI 1.1.22 (`.turn`, `.ask`) on the lib's branch `harness-panes`. Not validated by the owner yet; the lib's pieces are in its docs page (Chat, A turn) to be looked at there.
+
+Still to decide or do:
+
+- B, a thread through the turn's marks, was left for later: it can come over the ruler as a style.
+- The record of an answered question keeps no preview: the action's own row opens to what it wrote. If the code should stay in sight, the record can become a row that opens.
+- Keyboard: the question takes the focus as a whole; Tab reaches its buttons. Number keys for the answers (as the terminals have) are not there.
+- Not tested: a screen reader, Safari, Firefox.
 
 ## Found while driving a real conversation (2026-11-18), still open
 
-- **A refused edit counts as a file changed.** The person says Don't allow, and the reply still shows the Edit action, "1 file changed" and "Done". `ASK.bend` reads the tools the chat asked for, not whether each one ran.
-- **The file's name in Files changed is the browser's own gray button.** `messages.js` puts `.link` on a `<button>`; Bend-UI's `.link` only resets a button with `.link--icon`.
-- **The Laws view reads `GDD.md` with `EDITOR.bend` in the browser**, the way the chat read its conversation: a Bend function that walks a long text runs out of room there. Not tested on a long document.
 - **A game with no `GAME:` line takes the start of the first message as its name** (a folder named `create-the-file-game-hello-txt-with-the`).
-- Narrower than about 420 px, the three buttons of a permission question don't wrap.
+- The i-th answer is paired with the i-th action (`ASK.bend`): actions run at the same time could be paired wrongly.
+
+The Laws view was tested with a document of 58,000 letters (702 sentences): it opens whole.
 
 ## Known limits
 

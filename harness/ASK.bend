@@ -93,6 +93,25 @@ def question.of(+t: String, +what: String, edit: Bool, write: Bool, bash: Bool) 
 def question(+t: String, +what: String) -> String:
   question.of(t, what, String.eq(t, "Edit"), String.eq(t, "Write"), String.eq(t, "Bash"))
 
+# The question as the record that stays in the conversation once the person answered: without its
+# "Allow the chat to " and its "?", starting with a capital ("Write index.html", "Run this command").
+def asked.end(+s: String, mark: Bool) -> String:
+  match mark:
+    case True{}:
+      String.reverse(String.drop(String.reverse(s), 1n))
+    case False{}:
+      s
+
+def asked.at(+title: String, lead: Bool) -> String:
+  match lead:
+    case True{}:
+      Models.capital(asked.end(String.drop(title, String.length("Allow the chat to ")), String.ends_with(title, "?")))
+    case False{}:
+      asked.end(title, String.ends_with(title, "?"))
+
+def asked(+title: String) -> String:
+  asked.at(title, String.starts_with(title, "Allow the chat to "))
+
 # An edit's lines as a diff: each old line after "-", each new one after "+".
 def diff.mark(+mark: String, s: String, start: Bool) -> String:
   match s start:
@@ -291,6 +310,19 @@ def results_of.each(xs: List<&2, String>) -> List<&2, String>:
 def results_of(+out: String) -> List<&2, String>:
   results_of.each(rest_of(Models.pieces(out, "\"type\":\"tool_result\"")))
 
+# Which actions did not run (the person or a rule refused them, or they failed): Claude marks such an
+# answer "is_error":true. In the same order as results_of: "1" for those, "" for the others.
+# A quote inside the answer's own text is always escaped, so the text never looks like this mark.
+def fails_of.each(xs: List<&2, String>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      []
+    case +h <> t:
+      work.pick(String.contains(line_of(h), "\"is_error\":true"), "", "1") <> fails_of.each(t)
+
+def fails_of(+out: String) -> List<&2, String>:
+  fails_of.each(rest_of(Models.pieces(out, "\"type\":\"tool_result\"")))
+
 # The output of the n-th action (counted from 0), at most output_lines lines.
 def output_lines() -> U32: 40
 
@@ -318,6 +350,9 @@ def nth_or(xs: List<&2, String>, n: U32) -> String:
       h
     case h <> t m:
       nth_or(t, (m - 1 : U32))
+
+def failed_at(+fs: List<&2, String>, +i: U32) -> Bool:
+  String.eq(nth_or(fs, i), "1")
 
 # An edit shows what it changed (a diff, "-" and "+" lines); any other action what it answered.
 def output.of(+out: String, +tool: String, +n: U32, edit: Bool) -> String:
@@ -444,16 +479,17 @@ def detail.at(+inp: String, +result: String, edit: Bool, write: Bool) -> String:
 def detail(+name: String, +inp: String, +result: String) -> String:
   detail.at(inp, result, String.eq(name, "Edit"), String.eq(name, "Write"))
 
-def action_line(+p: String, +result: String) -> String:
-  "T" ++ tab() ++ work_kind(tool_name(p)) ++ tab() ++ work_tone(tool_name(p)) ++ tab() ++ work_what(tool_name(p), tool_input(p)) ++ tab() ++ detail(tool_name(p), tool_input(p), result) ++ nl()
+# An action that did not run says so, in place of the lines it would have changed.
+def action_line(+p: String, +result: String, failed: Bool) -> String:
+  "T" ++ tab() ++ work_kind(tool_name(p)) ++ tab() ++ work_tone(tool_name(p)) ++ tab() ++ work_what(tool_name(p), tool_input(p)) ++ tab() ++ work.pick(failed, detail(tool_name(p), tool_input(p), result), "not run") ++ nl()
 
 # Each action with its answer: the i-th result goes with the i-th action (none yet while it runs).
-def actions(xs: List<&2, String>, +rs: List<&2, String>, +i: U32) -> String:
+def actions(xs: List<&2, String>, +rs: List<&2, String>, +fs: List<&2, String>, +i: U32) -> String:
   match xs:
     case Nil{}:
       ""
     case +h <> t:
-      action_line(h, nth_or(rs, i)) ++ actions(t, rs, (i + 1 : U32))
+      action_line(h, nth_or(rs, i), failed_at(fs, i)) ++ actions(t, rs, fs, (i + 1 : U32))
 
 # The plan: the chat writes its steps in its text, one per line, and writes them again as they change:
 #   PLAN: [x] Make the map        done
@@ -616,12 +652,13 @@ def changes.keep(file: Bool, +p: String, cs: List<&2, Change>) -> List<&2, Chang
     case False{}:
       cs
 
-def changes.go(xs: List<&2, String>, cs: List<&2, Change>) -> List<&2, Change>:
+# A file counts as changed only when the action that would change it ran.
+def changes.go(xs: List<&2, String>, +fs: List<&2, String>, +i: U32, cs: List<&2, Change>) -> List<&2, Change>:
   match xs:
     case Nil{}:
       cs
     case +h <> t:
-      changes.go(t, changes.keep(is_file_tool(tool_name(h)), h, cs))
+      changes.go(t, fs, (i + 1 : U32), changes.keep((is_file_tool(tool_name(h)) && Bool.not(failed_at(fs, i))), h, cs))
 
 def changes.lines(cs: List<&2, Change>) -> String:
   match cs:
@@ -711,7 +748,7 @@ def context_of(+out: String) -> String:
   context.percent(context.used(line_of(last_or(List.last(&2, String, rest_of(Models.pieces(out, "{\"type\":\"assistant\"")))))), number(out, "contextWindow"))
 
 def work(+out: String) -> String:
-  actions(tools_of(out), results_of(out), 0) ++ plan_of(out) ++ changes.lines(changes.go(tools_of(out), [])) ++ changes.title(changes.count(changes.go(tools_of(out), []), 0)) ++ now.of(now.last(tools_of(out), "")) ++ context_of(out)
+  actions(tools_of(out), results_of(out), fails_of(out), 0) ++ plan_of(out) ++ changes.lines(changes.go(tools_of(out), fails_of(out), 0, [])) ++ changes.title(changes.count(changes.go(tools_of(out), fails_of(out), 0, []), 0)) ++ now.of(now.last(tools_of(out), "")) ++ context_of(out)
 
 # A number written in text ("12" is 12; "" is 0).
 def to_u32(+s: String) -> U32:

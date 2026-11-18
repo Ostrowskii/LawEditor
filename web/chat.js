@@ -9,6 +9,7 @@ import G from "../harness/GATE.bend";
 import A from "../harness/ASK.bend";
 import Ev from "../harness/EVENTS.bend";
 import { announce } from "bend-ui";
+import { codeBlock } from "bend-ui/syntax";
 import { mountDiagram } from "bend-ui/diagram";
 import { highlight } from "bend-ui/syntax";
 import { createMessages } from "./chat/messages.js";
@@ -20,7 +21,7 @@ import { createStart } from "./chat/start.js";
 import { createPlace } from "./chat/place.js";
 import { createList } from "./chat/list.js";
 import { markdown } from "./markdown.js";
-import { where, key, project, conversation, go, fresh, get, post, sleep, fields, inParts } from "./where.js";
+import { where, key, project, conversation, go, fresh, get, post, sleep, fields, inParts, esc } from "./where.js";
 
 const $ = (id) => document.getElementById(id);
 const page = document.querySelector(".page");
@@ -49,8 +50,8 @@ const settings = () => { const { ai, model } = models.get(); return `${ai}\t${mo
 let seen = 0, reader = 0, started = false;
 let now = { running: "", asking: "", game: "" };
 let reply = null, turn = "", streamed = "";       // the reply being drawn, its turn, its text so far
-let drawn = 0;                                    // the turn's actions already drawn above a question's card
-const cards = new Map();                          // question -> its card
+let ui = null;                                    // the turn on the page: a reply and what comes of it, until the person speaks
+const cards = new Map();                          // question -> what the turn keeps of it (a rule's row, an answer's line)
 let mineShown = 0;                                // messages of the person already drawn when they were sent
 
 const meter = $("context");
@@ -69,9 +70,11 @@ async function sync() {
   composer.set(!!running, !!asking);
 }
 
+const uiTurn = () => (ui ||= messages.turn());
 function newReply() {
-  reply = messages.theirs(drawn);
-  face.to(reply.slot); face.lookAt(reply.el);
+  const t = uiTurn();
+  reply = t.reply();
+  face.to(t.slot); face.lookAt(t.el);
   return reply;
 }
 const again = async () => { const r = await post(conversation("again"), settings()); if (!r.startsWith("ok")) sync(); };
@@ -82,25 +85,34 @@ const ANSWERS = {
   mode: [{ label: "Stay", value: "stay" }, { label: "Switch", value: "switch", main: true }],
   gate: [{ label: "Don't allow", value: G.deny_word() }, { label: "Allow for this session", value: G.session_word() }, { label: "Allow", value: G.allow_word(), main: true }],
 };
-const DOT = { busy: "dot dot--busy", ok: "dot dot--success", error: "dot dot--danger", none: "dot" };
 const kindOf = (q) => (Ev.is_law(q) ? "law" : Ev.is_mode(q) ? "mode" : "gate");
 
+// A question: what it asks goes to the message box's place (composer.ask), where the person answers; the
+// turn keeps the record (a rule's row with what came of it, or one line saying what was answered).
 function question(q, text, open) {
-  const kind = kindOf(q);
-  let card;
-  if (kind === "law") card = messages.card(text);
-  else if (kind === "mode") { const [title, ...why] = text.split("\n"); card = messages.card(title, why.join("\n"), DOT.none + " dot--warning"); }
-  else {
+  const kind = kindOf(q), t = uiTurn();
+  let card, ask;
+  if (kind === "law") {
+    card = t.rule(text);
+    ask = { title: "Add this rule to the document?", body: `<span class="turn__text">${esc(text)}</span>` };
+  } else if (kind === "mode") {
+    const [title, ...why] = text.split("\n");
+    card = t.record("");   // its note says it whole ("Switched to Ask before changes.")
+    ask = { title, body: why.length ? `<span class="turn__note">${esc(why.join("\n"))}</span>` : "" };
+  } else {
     // GATE.question(): the question, then the language and name of what would change, then what would change.
     const [title, meta = "", ...preview] = text.split("\n"), [lang, name] = meta.split("\t");
     const code = preview.join("\n").replace(/\n+$/, "");
-    if (reply) { drawn = reply.shown(); reply.stop(); reply = null; }   // what it writes after the action comes below the card
-    card = messages.card(title, code ? { code, lang, name } : "", "dot dot--warning");
+    card = t.record(G.action_of(title));
+    ask = { title, body: code ? codeBlock(code, { lang, name, clip: true }) : "" };
   }
   cards.set(q, card);
   if (!open) return;
-  announce("The chat asks: " + text.split("\n")[0]);   // said to who can't see the card arrive
-  card.ask(ANSWERS[kind]).then((word) => post(conversation(`answer/${q}`), word));
+  reply?.waiting(true);
+  if (kind === "gate") watch();   // the action it asks about shows in the turn at once
+  announce("The chat asks: " + text.split("\n")[0]);   // said to who can't see the question arrive
+  composer.ask(q, { ...ask, answers: ANSWERS[kind] }).then((word) => post(conversation(`answer/${q}`), word));
+  requestAnimationFrame(() => page.scrollTo({ top: page.scrollHeight }));   // the question took room: the turn's last rows stay in sight
 }
 
 // One event. old: it is read from a conversation opened again (no motion, nothing waits).
@@ -108,8 +120,8 @@ function question(q, text, open) {
 async function draw(line, old, later) {
   const parts = fields(line), kind = parts[0], f = (n) => parts[n + 1] || "";
   const kindIs = (k) => (l) => l.startsWith(k + "\t");
-  if (kind === "me") { if (mineShown > 0) mineShown--; else messages.mine(f(0), [], old); }
-  if (kind === "turn") { turn = f(0); streamed = ""; drawn = 0; newReply(); }
+  if (kind === "me") { ui = null; if (mineShown > 0) mineShown--; else messages.mine(f(0), [], old); }
+  if (kind === "turn") { turn = f(0); streamed = ""; newReply(); }
   if (kind === "reply") {
     const r = reply || newReply(), text = shown(f(1));
     try { context(r.work(await get(conversation(`work/${f(0)}`)), f(0))); } catch {}   // its actions and every file changed
@@ -118,21 +130,25 @@ async function draw(line, old, later) {
   }
   if (kind === "fail" || kind === "stopped") {
     reply?.stop(); reply = null; turn = ""; face.lookAt(null);
-    if (!later.some(kindIs("turn"))) messages.failed(kind === "fail" ? f(1) : "You stopped the reply.", again);
+    if (!later.some(kindIs("turn"))) uiTurn().fail(kind === "fail" ? f(1) : "You stopped the reply.", again);
   }
   if (kind === "ask") question(f(0), f(1), !later.some((l) => kindIs("answer")(l) && fields(l)[1] === f(0)));
   if (kind === "answer") {
     const q = f(0), k = kindOf(q);
-    cards.get(q)?.answered();
+    composer.answered(q);
+    // Until the engine's note comes, the record says what was answered, in the gate's own words.
+    if (k === "gate") cards.get(q)?.answered(G.note(f(1)).replace(/\.$/, ""), !!G.lets_run(f(1)));
+    else if (k === "mode") cards.get(q)?.answered(f(1) === "switch" ? "Switched" : "Stayed", f(1) === "switch");
+    else cards.get(q)?.answered();
     if (k === "mode" && f(1) === "switch") chatMode.set(O.mode_after(O.switch()));
-    if (k === "gate") { if (G.keeps(f(1))) chatMode.allowed(); if (turn && !reply && !old) newReply(); }
+    if (k === "gate") { if (G.keeps(f(1))) chatMode.allowed(); reply?.waiting(false); }
   }
   if (kind === "note") {
-    cards.get(f(0))?.set(DOT[f(1)] || DOT.none, f(2));
+    cards.get(f(0))?.set(f(1), f(2));
     if (!old && Ev.is_law(f(0)) && f(1) !== "busy") document.dispatchEvent(new CustomEvent("laweditor:changed"));
   }
   if (kind === "game") { go(f(0)); place.lock(f(1)); list.refresh(); }
-  if (kind === "ran") messages.ran(f(0), f(1), f(2));
+  if (kind === "ran") { ui = null; messages.ran(f(0), f(1), f(2)); }
 }
 
 // Reads the events the page hasn't seen and draws them, in order.
@@ -190,12 +206,12 @@ const composer = createComposer($("composer"), {
     // A message that starts with ! is a command the person runs themselves, in the project's folder.
     if (text.startsWith("!")) {
       const r = await post(conversation("run"), settings() + "\n" + text.slice(1));
-      if (!r.startsWith("ok")) { messages.failed(r === "readonly" ? "Only read runs no command. Pick another mode under the message box to run it." : r === "busy" ? "The chat is still answering, or a question waits above." : "The LawEditor server isn't running, or this project isn't there anymore."); }
+      if (!r.startsWith("ok")) { messages.failed(r === "readonly" ? "Only read runs no command. Pick another mode under the message box to run it." : r === "busy" ? "The chat is still answering, or a question waits for your answer." : "The LawEditor server isn't running, or this project isn't there anymore."); }
       await read(); sync(); list.refresh(); return;
     }
-    messages.mine(text, files); mineShown++;
+    ui = null; messages.mine(text, files); mineShown++;
     const r = await post(conversation("say"), settings() + "\n" + text + C.with_files("", files.join(", ")));   // CHAT.bend writes what comes after the text
-    if (!r.startsWith("ok")) { mineShown--; messages.failed(r === "busy" ? "The chat is still answering, or a question waits above." : "The LawEditor server isn't running, or this project isn't there anymore.", again); sync(); return; }
+    if (!r.startsWith("ok")) { mineShown--; messages.failed(r === "busy" ? "The chat is still answering, or a question waits for your answer." : "The LawEditor server isn't running, or this project isn't there anymore.", again); sync(); return; }
     list.refresh();
   },
 });
@@ -208,7 +224,7 @@ function command(name) {
 }
 
 function reset() {
-  reader++; seen = 0; now = { running: "", asking: "", game: "" }; reply = null; turn = ""; streamed = ""; mineShown = 0; drawn = 0;
+  reader++; seen = 0; now = { running: "", asking: "", game: "" }; ui = null; composer.answered(); reply = null; turn = ""; streamed = ""; mineShown = 0;
   cards.clear(); messages.clear(); meter.hidden = true;
 }
 const toChat = () => document.querySelector('#side [data-view="chat"]').click();

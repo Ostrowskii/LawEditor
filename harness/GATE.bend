@@ -144,6 +144,10 @@ def answer(+msg: String, +said: String) -> String:
 def question(+msg: String) -> String:
   Ask.question(tool(msg), what(msg)) ++ "\n" ++ Ask.preview_lang(tool(msg), msg) ++ Ask.tab() ++ Ask.preview_name(tool(msg), msg) ++ "\n" ++ Ask.preview(tool(msg), msg)
 
+# What was asked, in a few words, for the line that stays once the person answered ("Write index.html").
+def action_of(+title: String) -> String:
+  Ask.asked(title)
+
 # ---------- The gate decides ----------
 # Any agent that wants to act knocks here with the whole action: its tool, and the file or command.
 # The rules below are checked in order and the first that fits decides. decide() runs this list and

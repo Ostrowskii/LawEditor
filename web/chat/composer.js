@@ -5,6 +5,7 @@
 // message goes out with its files: onSend(text, files). Whether the chat answers or a question waits comes
 // from the conversation itself (set): the composer doesn't guess.
 import C from "../../harness/CHAT.bend";
+import { busy, done as doneBtn } from "bend-ui";
 import { esc } from "../where.js";
 
 export function createComposer(form, { onSend, onStop, onCommand, files: listFiles }) {
@@ -82,8 +83,46 @@ export function createComposer(form, { onSend, onStop, onCommand, files: listFil
   function set(isAnswering, isAsking) {
     const freed = (answering || asking) && !isAnswering && !isAsking;
     answering = isAnswering; asking = isAsking; text.disabled = isAsking;
-    text.placeholder = isAsking ? "Answer the question above to keep talking" : placeholder;
+    text.placeholder = isAsking ? "Answer the question to keep talking" : placeholder;
     sync(); if (freed && !form.hidden) text.focus();
   }
-  return { focus: () => text.focus(), set };
+
+  // ---------- A question takes the message box's place (Bend-UI's .ask) ----------
+  // Where the person answers is where the chat asks: the question, what it is about (body: a code block,
+  // a note, a rule's sentence) and its answers ([{ label, value, main }]). ask() waits for a click.
+  // Every button but the main one is bordered and "async": clicked, it turns while the answer goes,
+  // then shows its check, and the message box comes back.
+  const box = form.querySelector(".composer__box"), dock = form.querySelector(".ask");
+  let asked = null;
+  function ask(id, { title, body = "", answers }) {
+    return new Promise((done) => {
+      asked = id;
+      dock.innerHTML = `<div class="turn__row"><div class="turn__mark"><span class="dot dot--warning"></span></div><div class="turn__main"><span class="ask__title" id="question-title"></span>${body}<div class="turn__actions"></div></div></div>`;
+      dock.querySelector(".ask__title").textContent = title;
+      const actions = dock.querySelector(".turn__actions");
+      for (const a of answers) {
+        const b = document.createElement("button");
+        b.className = a.main ? "btn btn--sm btn--primary" : "btn btn--sm btn--bordered btn--async"; b.type = "button";
+        if (!a.main) b.innerHTML = '<svg class="icon btn__done" aria-hidden="true"><use href="#i-check"/></svg><span class="btn__label"></span><svg class="btn__spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" pathLength="100"/></svg>';
+        (b.querySelector(".btn__label") || b).textContent = a.label;
+        b.addEventListener("click", () => {
+          actions.querySelectorAll(".btn").forEach((x) => x !== b && (x.disabled = true));
+          if (a.main) b.disabled = true; else busy(b, true);
+          done(a.value);
+        });
+        actions.append(b);
+      }
+      box.hidden = true; dock.hidden = false;
+      if (!form.hidden) dock.focus({ preventScroll: true });   // the question, not a button: Enter alone answers nothing
+    });
+  }
+  // The question was answered (here, or in another window): id, or nothing for whichever one shows.
+  function answered(id) {
+    if (asked === null || (id !== undefined && asked !== id)) return;
+    asked = null;
+    const close = () => { if (asked !== null) return; dock.hidden = true; dock.replaceChildren(); box.hidden = false; if (!text.disabled && !form.hidden) text.focus(); };
+    const b = dock.querySelector('[aria-busy="true"]');
+    if (b && id !== undefined) { doneBtn(b, b.textContent.trim()); setTimeout(close, 600); } else close();
+  }
+  return { focus: () => text.focus(), set, ask, answered };
 }

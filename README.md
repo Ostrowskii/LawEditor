@@ -74,6 +74,10 @@ The app opens on a new conversation, with nothing to pick. The side bar has **Ne
 - **The AI** (Claude or Codex) and **its model**: the list comes from that AI's own CLI (`claude --help` aliases, `codex debug models`).
 - **The mode**: **Only read** (it reads your project and never edits it) or **Ask before changes** (Claude only: before it changes a file or runs a command, you get Allow / Allow for this session / Don't allow). In a mode that asks, the menu also lists what you allowed in this conversation.
 
+A reply and everything that comes of it is one **turn**, drawn on one ruler (Bend-UI's `.turn`): its plan, each thing it did (a row that opens to what it answered), what it does now, its words, then one line with the files it changed. When the reply ends, its work folds into one line ("Worked for 48s · 3 actions") that opens again. The rules it heard stay under it, each with what came of it.
+
+A **question** (a rule to add, the mode it offers, an action that needs your yes) takes the message box's place until you answer: where you answer is where it asks, with what would change shown in it. The turn keeps one line as the record ("Allowed · Write index.html"). An action you refused says "not run", and a file counts as changed only when the action that changes it ran.
+
 A message that starts with `!` is a command you run yourself in the project (`!ls`); `/` lists the commands and `@` points to a file. The chat's **Context** button shows `CHAT.md`, its skill `HEAR.md` and `HARNESS.md` (what the chat may do, and when it asks).
 
 Several conversations go at once: start another while one works, and come back to it from the list.

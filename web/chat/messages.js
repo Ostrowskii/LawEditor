@@ -1,12 +1,22 @@
-// Chat messages: draws them. While the agent works, its reply shows what ASK.bend reads from the turn
-// (the server's work/<turn>): its actions (.tools), its plan (.plan), what it does now (.working) and, at
-// the end, the files it changed (.changes).
+// Chat messages: draws them. A reply and everything that comes of it (what the agent did, its plan, its
+// words, the files it changed, the questions it asked, the rules it heard) is one turn: Bend-UI's .turn,
+// rows of two columns (a mark, the text), so every line of text of a turn starts at the same place.
+// While the agent works, its part of the turn shows what ASK.bend reads from the turn's file (the server's
+// work/<turn>): its plan, its actions, what it does now. When it ends, that work folds into one line.
 // at: the open conversation's things: at.output(turn, n) (where an action's output is asked for),
 // at.openFolder(), at.openFile(path) and at.changed(files) (a reply changed these files).
-import { busy, done as doneBtn } from "bend-ui";
 import { markdown } from "../markdown.js";
 import { codeBlock, highlight } from "bend-ui/syntax";
-import { lessMotion, sleep, get } from "../where.js";
+import { lessMotion, sleep, get, esc, icon } from "../where.js";
+
+const DOTS = { busy: "dot dot--busy", ok: "dot dot--success", error: "dot dot--danger", none: "dot" };
+const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
+// One row of a turn: what goes in its mark, what goes beside it. turn__row--sm: a line of work (small text).
+const row = (mark, main, cls = "") => el(`<div class="turn__row ${cls}"><div class="turn__mark">${mark}</div><div class="turn__main">${main}</div></div>`);
+const line = (kind, what, { meta = "", tone = "", mono = false } = {}) => `<div class="turn__line"><span class="tool__kind${tone ? " tool__kind--" + tone : ""}">${esc(kind)}</span><span class="tool__what${mono ? " mono" : ""}">${esc(what)}</span>${meta ? `<span class="tool__meta">${esc(meta)}</span>` : ""}</div>`;
+// A row that opens: its summary is the row (spans: a <summary> takes no <div>), then what it shows.
+const summary = (mark, main) => `<summary class="turn__row turn__row--sm"><span class="turn__mark">${mark}</span><span class="turn__main">${main.replace(/<(\/?)div/g, "<$1span")}</span></summary>`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 export function createMessages(list, page, at) {
   const down = () => page.scrollTo({ top: page.scrollHeight, behavior: lessMotion.matches ? "auto" : "smooth" });
@@ -22,188 +32,190 @@ export function createMessages(list, page, at) {
     list.append(m); down();
   }
 
-  // The agent's: its face, then what it is doing, then its words.
-  // skip: actions an earlier reply of this turn already shows (the turn goes on after a permission card).
-  function theirs(skip = 0) {
-    const m = document.createElement("div");
-    m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"><div></div></div><div class="msg__body"><div class="working"><span class="dot dot--warning"></span><span class="working__verb">Reading</span><span class="working__what">your project</span><span class="working__time">0s</span></div></div>';
+  // A turn: the agent's face, then its rows. It goes on until the person speaks again.
+  function turn() {
+    const m = el('<div class="msg msg--face"><div class="msg__face"><div></div></div><div class="turn"></div></div>');
     list.append(m); down();
-    const body = m.lastChild, working = body.querySelector(".working");
-    const text = document.createElement("div");
-    let streamed = false, tools = null, plan = null, changes = [], head = "";
-    const t0 = Date.now(), tick = setInterval(() => { working.querySelector(".working__time").textContent = Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
-    const before = (el) => body.insertBefore(el, text.isConnected ? text : working);
-    const say = (s) => { if (!text.isConnected) body.insertBefore(text, working); text.textContent = s; };
-    // The work so far, as ASK.bend wrote it: one line each, T (action), P (plan step), C (file), H (files' title), W (now).
-    // turn: the turn's id, so an action can show what it answered (at.output(turn, n)) when opened.
-    // Answers how much context the turn used (percent), or null.
-    function work(lines, turn) {
-      const rows = lines.split("\n").filter(Boolean).map((l) => l.split("\t"));
-      const acts = rows.filter((r) => r[0] === "T"), steps = rows.filter((r) => r[0] === "P"), now = rows.find((r) => r[0] === "W");
-      changes = rows.filter((r) => r[0] === "C"); head = (rows.find((r) => r[0] === "H") || [])[1] || "";
-      if (acts.length > skip + (tools ? tools.children.length : 0)) {
-        if (!tools) { tools = document.createElement("div"); tools.className = "tools"; before(tools); }
-        for (const [, kind, tone, what] of acts.slice(skip + tools.children.length)) {
-          const n = skip + tools.children.length, d = document.createElement("details"); d.className = "disclosure tool";
-          d.innerHTML = '<summary><svg class="icon icon--sm disclosure__chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg><span class="tool__kind"></span><span class="tool__what mono"></span><span class="tool__meta"></span></summary><pre class="tool__out"></pre>';
-          const k = d.querySelector(".tool__kind"); k.textContent = kind; if (tone) k.classList.add("tool__kind--" + tone);
-          d.querySelector(".tool__what").textContent = what; tools.append(d);
+    const box = m.lastChild;
+    let rules = null;      // the group of rules being heard (it ends when something else comes)
+    let part = null;       // the reply that runs now
+    const put = (node) => { rules = null; box.append(node); down(); return node; };
+
+    // ---------- A reply: one answer of the agent, with its work ----------
+    function reply() {
+      const work = el('<div class="turn"></div>');                               // its plan, its actions, what was allowed
+      const now = row('<span class="dot dot--warning"></span>', '<div class="turn__line"><span class="working__verb">Reading</span><span class="tool__what">your project</span><span class="tool__meta">0s</span></div>', "turn__row--sm");
+      const text = row("", "<div></div>"), words = text.querySelector(".turn__main > div");
+      put(work); box.append(now);
+      let plan = null, acts = null, count = 0, steps = 0, streamed = false, changes = [], head = "", held = false, ended = false;
+      const t0 = Date.now(), verb = now.querySelector(".working__verb"), what = now.querySelector(".tool__what"), time = now.querySelector(".tool__meta");
+      const tick = setInterval(() => { time.textContent = Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+      const say = () => { if (text.isConnected) return; if (now.isConnected) now.before(text); else box.append(text); };
+
+      // The work so far, as ASK.bend wrote it: one line each, T (action), P (plan step), C (file), H (files' title), W (now).
+      // turnId: the turn's id, so an action can show what it answered (at.output(turnId, n)) when opened.
+      // Answers how much context the turn used (percent), or null.
+      function draw(lines, turnId) {
+        const rows = lines.split("\n").filter(Boolean).map((l) => l.split("\t"));
+        const all = rows.filter((r) => r[0] === "T"), plans = rows.filter((r) => r[0] === "P"), doing = rows.find((r) => r[0] === "W");
+        changes = rows.filter((r) => r[0] === "C"); head = (rows.find((r) => r[0] === "H") || [])[1] || "";
+        // The plan always comes first, whichever arrived first.
+        if (plans.length) {
+          if (!plan) { plan = el('<div class="turn__group"></div>'); work.prepend(plan); }
+          steps = plans.length;
+          plans.forEach(([, status, label], i) => {
+            let r = plan.children[i];
+            if (!r) { r = row('<span class="plan__step"><span class="plan__node"><i class="node__core"></i></span></span>', '<span class="turn__step"></span>', "turn__row--sm"); r.querySelector(".plan__node").style.setProperty("--i", i); plan.append(r); }
+            const node = r.querySelector(".plan__step"), step = r.querySelector(".turn__step"), was = node.classList.contains("is-now");
+            step.textContent = label;
+            for (const x of [node, step]) { x.classList.toggle("is-done", status === "done"); x.classList.toggle("is-now", status === "now"); }
+            if (was && status === "done") { node.classList.add("is-pop"); setTimeout(() => node.classList.remove("is-pop"), 600); }
+          });
+        }
+        for (const [, kind, tone, label] of all.slice(count)) {
+          const n = count++;
+          if (!acts) { acts = el('<div class="turn__group"></div>'); work.append(acts); }
+          const d = el(`<details class="turn__more" data-action>${summary(icon("chevron-right", true), line(kind, label, { tone, mono: true }))}<pre class="turn__out"></pre></details>`);
+          acts.append(d);
           d.addEventListener("toggle", async () => {
-            const out = d.querySelector(".tool__out");
+            const out = d.querySelector(".turn__out");
             if (!d.open || !out || out.textContent) return;
-            let text = ""; try { text = await get(at.output(turn, n)); } catch {}
+            let answer = ""; try { answer = await get(at.output(turnId, n)); } catch {}
             // An edit answers with what it changed: drawn as a diff code block, clipped when long.
-            if (kind === "Edit" && text) { out.replaceWith(Object.assign(document.createElement("div"), { innerHTML: codeBlock(text, { lang: "diff", name: what, clip: true }) }).firstChild); return; }
-            out.textContent = text || "(no output)";
+            if (kind === "Edit" && answer) { out.replaceWith(el(codeBlock(answer, { lang: "diff", name: label, clip: true }))); return; }
+            out.textContent = answer || "(no output)";
           });
         }
-        // The detail comes when the action answers: an edit's lines, or how many lines it answered.
-        acts.slice(skip).forEach(([, , , , detail], i) => { const m = tools.children[i]?.querySelector(".tool__meta"); if (m && detail) m.textContent = detail; });
-      }
-      if (steps.length) {
-        if (!plan) { plan = document.createElement("ol"); plan.className = "plan"; body.insertBefore(plan, tools ? tools.nextSibling : body.firstChild); }
-        steps.forEach(([, status, what], i) => {
-          let li = plan.children[i];
-          if (!li) { li = document.createElement("li"); li.className = "plan__step"; li.style.setProperty("--i", i); li.innerHTML = '<span class="plan__node"><i class="node__core"></i></span><span class="plan__text"></span>'; plan.append(li); }
-          const was = li.classList.contains("is-now");
-          li.querySelector(".plan__text").textContent = what;
-          li.classList.toggle("is-done", status === "done"); li.classList.toggle("is-now", status === "now");
-          if (was && status === "done") { li.classList.add("is-pop"); setTimeout(() => li.classList.remove("is-pop"), 600); }
+        // The detail comes when the action answers: an edit's lines, how many lines it answered, or that it didn't run.
+        const drawn = work.querySelectorAll("details[data-action]");
+        all.forEach(([, , , , detail], i) => {
+          const d = drawn[i]; if (!d || !detail) return;
+          let meta = d.querySelector("summary .tool__meta");
+          if (!meta) { meta = document.createElement("span"); meta.className = "tool__meta"; d.querySelector("summary .turn__line").append(meta); }
+          meta.textContent = detail;
         });
-      }
-      if (now && !streamed) { working.querySelector(".working__verb").textContent = now[1]; working.querySelector(".working__what").textContent = now[2]; }
-      down();
-      const x = rows.find((r) => r[0] === "X");
-      return x ? Number(x[1]) : null;
-    }
-    // Done: the working line goes; the files changed come under the answer.
-    function finish() {
-      clearInterval(tick); working.remove();
-      if (!changes.length) return;
-      at.changed(changes.map(([, file, add, del]) => [file, Number(add), Number(del)]));
-      const c = document.createElement("div"); c.className = "changes";
-      c.innerHTML = '<div class="changes__head"><span></span></div>';
-      c.querySelector(".changes__head span").textContent = head;
-      for (const [, file, add, del] of changes) {
-        const r = document.createElement("div"); r.className = "changes__row";
-        r.innerHTML = '<button class="link changes__file mono" type="button"></button><span class="changes__add"></span><span class="changes__del"></span>';
-        r.children[0].textContent = file; r.children[0].addEventListener("click", () => at.openFile(file)); r.children[1].textContent = Number(add) ? "+" + add : ""; r.children[2].textContent = Number(del) ? "−" + del : "";
-        c.append(r);
-      }
-      body.append(c);
-      // The project changed: the card that closes the turn (Harness Lab, "Open the project folder"): a green
-      // dot, what changed, and a link that opens the folder on the computer (POST /api/open-folder).
-      const card = document.createElement("div");
-      card.innerHTML = '<div class="block block--done"><div class="block__slot"><span class="dot dot--success"></span></div><div class="block__text"></div></div><div class="actions actions--start"><button class="link link--icon" type="button"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-folder"/></svg><span>Open project folder</span></button></div>';
-      card.querySelector(".block__text").textContent = "Done. " + head + ".";
-      card.querySelector(".link").addEventListener("click", () => at.openFolder());
-      body.append(card);
-    }
-    // The answer, once whole: Markdown, drawn by Bend-UI's .prose.
-    const prose = (s) => { if (!text.isConnected) body.insertBefore(text, working); text.className = "prose"; text.innerHTML = markdown(s); text.querySelectorAll("pre").forEach((pre) => highlight(pre, pre.dataset.lang || undefined)); };
-    return {
-      el: m, slot: m.firstChild.firstChild, work,
-      shown: () => skip + (tools ? tools.children.length : 0),
-      // The answer while it is written (Claude streams it): shown as it comes, no word motion.
-      live(s) {
-        streamed = true; say(s);
-        working.querySelector(".working__verb").textContent = "Writing"; working.querySelector(".working__what").textContent = "";
+        if (doing && !streamed && !held) { verb.textContent = doing[1]; what.textContent = doing[2]; }
         down();
-      },
-      // The answer arrives whole from the CLI; its words appear one after another, each fading in.
-      async write(answer) {
-        if (!streamed) {
-          say("");
-          for (const w of answer.split(/(\s+)/).filter(Boolean)) {
-            const s = document.createElement("span");
-            if (/\S/.test(w)) s.className = "msg__word";
-            s.textContent = w; text.append(s);
-            if (/\S/.test(w) && !lessMotion.matches) { down(); await sleep(30); }
+        const x = rows.find((r) => r[0] === "X");
+        return x ? Number(x[1]) : null;
+      }
+
+      // Done: what it does now goes; its work folds into one line; the files changed close the reply.
+      function finish(took) {
+        if (ended) return; ended = true;
+        clearInterval(tick); now.remove();
+        if (count || steps) {
+          const about = [took ? "for " + took : "", count ? plural(count, "action") : "", steps ? plural(steps, "step") : ""].filter(Boolean).join(" · ");
+          const fold = el(`<details class="turn__more turn__more--flat">${summary(icon("chevron-right", true), line("Worked", about))}</details>`);
+          work.replaceWith(fold); fold.append(work);
+          // What the person allowed or refused stays in sight, after the fold.
+          let after = fold;
+          for (const r of [...work.querySelectorAll(":scope > .is-record")]) { after.after(r); after = r; }
+        } else if (!work.children.length) work.remove();
+        else work.replaceWith(...work.children);
+        if (!changes.length) return;
+        at.changed(changes.map(([, file, add, del]) => [file, Number(add), Number(del)]));
+        const end = row('<span class="dot dot--success"></span>', `<div class="turn__line turn__line--wrap"><span class="turn__strong">${esc(head)}</span><button class="link link--icon turn__end" type="button">${icon("folder", true)}<span>Open folder</span></button></div>`, "turn__row--sm");
+        const folder = end.querySelector(".turn__end");
+        for (const [, file, add, del] of changes.slice(0, 3)) {
+          const f = el(`<button class="link link--icon turn__file" type="button"><span class="mono">${esc(file)}</span>${Number(add) ? `<span class="changes__add">+${add}</span>` : ""}${Number(del) ? `<span class="changes__del">−${del}</span>` : ""}</button>`);
+          f.addEventListener("click", () => at.openFile(file)); folder.before(f);
+        }
+        if (changes.length > 3) folder.before(el(`<span class="tool__meta">and ${changes.length - 3} more</span>`));
+        folder.addEventListener("click", () => at.openFolder());
+        put(end);
+      }
+      // The answer, once whole: Markdown, drawn by Bend-UI's .prose.
+      const prose = (s) => { if (!s.trim()) return; say(); words.className = "prose"; words.innerHTML = markdown(s); words.querySelectorAll("pre").forEach((pre) => highlight(pre, pre.dataset.lang || undefined)); };
+      const took = () => { const s = Math.round((Date.now() - t0) / 1000); return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`; };
+
+      return (part = {
+        work: draw,
+        // The answer while it is written (Claude streams it): shown as it comes, no word motion.
+        live(s) {
+          if (!s.trim()) { text.remove(); return; }   // only its plan so far: no empty line of text, and it isn't writing yet
+          streamed = true; say(); words.textContent = s;
+          if (!held) { verb.textContent = "Writing"; what.textContent = ""; }
+          down();
+        },
+        // The answer arrives whole from the CLI; its words appear one after another, each fading in.
+        async write(answer) {
+          if (!streamed && answer.trim()) {
+            say(); words.textContent = "";
+            for (const w of answer.split(/(\s+)/).filter(Boolean)) {
+              const s = document.createElement("span");
+              if (/\S/.test(w)) s.className = "msg__word";
+              s.textContent = w; words.append(s);
+              if (/\S/.test(w) && !lessMotion.matches) { down(); await sleep(30); }
+            }
           }
-        }
-        prose(answer); finish(); down();
-      },
-      // From an old conversation, opened again: no motion, the answer and what it changed.
-      restore(answer) { prose(answer); finish(); },
-      // It stopped with an error: the working line goes; the error card comes from failed().
-      stop() { clearInterval(tick); working.remove(); if (!text.isConnected && !tools && !plan) m.remove(); },
-    };
+          prose(answer); finish(took()); part = null; down();
+        },
+        // From an old conversation, opened again: no motion, the answer and what it changed.
+        restore(answer) { prose(answer); finish(""); part = null; },
+        // It stopped, or failed: what it does now goes, and its work stays open (where it stopped is in sight).
+        stop() { ended = true; clearInterval(tick); now.remove(); if (!work.children.length) work.remove(); part = null; },
+        // A question waits for the person: the reply says so, instead of counting as if it worked.
+        waiting(on) { held = on; verb.textContent = on ? "Waiting" : "Working"; what.textContent = on ? "for your answer" : ""; },
+        record(node) { acts = null; work.append(node); down(); },
+      });
+    }
+
+    // ---------- A rule the chat heard: its sentence, and what came of it ----------
+    function rule(sentence) {
+      let r = null;
+      const show = () => {
+        if (r) return;
+        if (!rules) { const g = el('<div class="turn__group"></div>'); g.append(row("", '<span class="turn__label">Rules heard</span>', "turn__row--sm")); put(g); rules = g; }
+        r = row('<span class="dot"></span>', `<span class="turn__text">${esc(sentence)}</span><span class="turn__note"></span>`, "turn__row--tight");
+        rules.append(r); down();
+      };
+      return {
+        answered: show,
+        set(state, note) {
+          show();
+          r.querySelector(".dot").className = DOTS[state] || DOTS.none;
+          const n = r.querySelector(".turn__note"); n.textContent = note; n.classList.toggle("turn__note--error", state === "error");
+        },
+      };
+    }
+    // ---------- What the person answered to a question (the mode it offered, an action it asked for) ----------
+    // what: what was asked, in a few words ("Write index.html"), or nothing when the answer's own words
+    // say it whole. One line stays in the turn as the record.
+    function record(what) {
+      let r = null;
+      const show = (said, ok) => {
+        const html = `<div class="turn__mark ${ok ? "turn__mark--success" : "turn__mark--warning"}">${icon(ok ? "check" : "x", true)}</div><div class="turn__main">${line(said, what, { tone: ok ? "" : "warning" })}</div>`;
+        if (r) { r.innerHTML = html; return; }
+        r = el(`<div class="turn__row turn__row--sm is-record">${html}</div>`);
+        if (part) part.record(r); else put(r);
+      };
+      return { answered: (said, ok) => show(said, ok), set: (state, note) => show(note.replace(/\.$/, ""), state === "ok") };
+    }
+    // The reply stopped or failed: the turn says why, after what it had done.
+    const fail = (why, again) => put(failure(why, again, (r) => r.remove()));
+    return { el: m, slot: m.firstChild.firstChild, reply, rule, record, fail };
   }
 
-  // A question for the person, as a card: a rule the chat heard (HEAR.bend: the sentence as a document
-  // block), the mode it offers (OFFER.bend), or an action that needs a yes (GATE.bend).
-  // preview is a note, or { code, lang, name }: a code block, clipped when long (an edit comes as a diff).
-  // The buttons are Bend-UI's polished ones (Harness Lab): every button but the main one is bordered and
-  // "async": clicked, it turns while the answer goes, then shows its check.
-  function card(sentence, preview = "", dot = "dot") {
-    const m = document.createElement("div");
-    m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__slot"><span class="dot"></span></div><div class="block__text"></div></div><div class="actions"></div></div>';
-    const block = m.querySelector(".block"), actions = m.querySelector(".actions");
-    block.querySelector(".block__text").textContent = sentence;
-    block.querySelector(".dot").className = dot;
-    if (preview && typeof preview === "object") block.insertAdjacentHTML("beforeend", codeBlock(preview.code, { lang: preview.lang, name: preview.name, clip: true }));
-    else if (preview) { const p = document.createElement("pre"); p.className = "block__out is-preview"; p.textContent = preview; block.append(p); }
-    list.append(m); down();
-    // The buttons go once the question is answered (here, or in another window).
-    const answered = () => {
-      const b = actions.querySelector('[aria-busy="true"]');
-      if (b) { doneBtn(b, b.textContent.trim()); setTimeout(() => actions.remove(), 600); } else actions.remove();
-    };
-    return {
-      // answers: [{ label, value, main }]. Waits for a click.
-      ask: (answers) => new Promise((done) => {
-        for (const a of answers) {
-          const b = document.createElement("button");
-          b.className = a.main ? "btn btn--sm btn--primary" : "btn btn--sm btn--bordered btn--async"; b.type = "button";
-          if (!a.main) b.innerHTML = '<svg class="icon btn__done" aria-hidden="true"><use href="#i-check"/></svg><span class="btn__label"></span><svg class="btn__spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" pathLength="100"/></svg>';
-          (b.querySelector(".btn__label") || b).textContent = a.label;
-          b.addEventListener("click", () => {
-            actions.querySelectorAll(".btn").forEach((x) => x !== b && (x.disabled = true));
-            if (a.main) b.disabled = true; else busy(b, true);
-            done(a.value);
-          });
-          actions.append(b);
-        }
-        down();
-      }),
-      answered,
-      // What came of it: the block's dot, and a note under the sentence.
-      set(dot, note) {
-        answered();
-        block.querySelector(".dot").className = dot;
-        let out = block.querySelector(".block__out:not(.is-preview)");
-        if (!out) { out = document.createElement("pre"); out.className = "block__out"; block.append(out); }
-        out.classList.toggle("block__out--error", dot.includes("danger"));
-        out.textContent = note; down();
-      },
-    };
+  // Why something couldn't be done, and Try again when there is something to try (gone: what to take away then).
+  function failure(why, again, gone) {
+    const r = row('<span class="dot"></span>', `<div class="turn__line turn__line--wrap"><span class="turn__text">${esc(why)}</span>${again ? '<button class="btn btn--sm turn__end" type="button">Try again</button>' : ""}</div>`);
+    if (again) r.querySelector(".btn").addEventListener("click", () => { gone(r); again(); });
+    return r;
   }
-
-  // The reply stopped, or something couldn't be done: a card without a dot (Bend-UI drops its column), why,
-  // and Try again when there is something to try.
+  // The same, outside any turn (a message that could not be sent, a command that could not run).
   function failed(why, again) {
-    const m = document.createElement("div");
-    m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text"></div></div><div class="actions"><button class="btn btn--sm" type="button">Try again</button></div></div>';
-    m.querySelector(".block__text").textContent = why;
-    if (again) m.querySelector(".actions .btn").addEventListener("click", () => { m.remove(); again(); });
-    else m.querySelector(".actions").remove();   // nothing to try again: it only says why
-    list.append(m); down();
+    const m = el('<div class="msg msg--face"><div class="msg__face"></div><div class="turn"></div></div>');
+    m.lastChild.append(failure(why, again, () => m.remove())); list.append(m); down();
   }
 
   // A command the person ran themselves (!): the command, and what it printed.
   function ran(command, code, output) {
-    const m = document.createElement("div");
-    m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__slot"><span class="dot"></span></div><div class="block__text mono"></div><pre class="block__out"></pre></div></div>';
-    m.querySelector(".block__text").textContent = command;
-    m.querySelector(".dot").className = code === "0" ? "dot dot--success" : "dot dot--danger";   // how it ended
-    const out = m.querySelector(".block__out");
-    out.textContent = output || "(no output)"; out.classList.toggle("block__out--error", code !== "0");
+    const m = el('<div class="msg msg--face"><div class="msg__face"></div><div class="turn"></div></div>');
+    const ok = code === "0";
+    m.lastChild.append(row(`<span class="dot ${ok ? "dot--success" : "dot--danger"}"></span>`, `${line("You ran", command, { mono: true })}<pre class="turn__out${ok ? "" : " turn__out--error"}">${esc(output || "(no output)")}</pre>`, "turn__row--sm"));
     list.append(m); down();
   }
 
-  return { mine, theirs, card, failed, ran, clear: () => list.replaceChildren() };
+  return { mine, turn, failed, ran, clear: () => list.replaceChildren() };
 }
