@@ -24,6 +24,7 @@ Not built. The artifact drew three options: chats side by side, led by you (buil
 - The terminal pane draws lines and colors (`TERM=dumb`), not a full screen. Its helper is `python3`; a pseudo-terminal in Bend itself would remove it.
 - Open a folder… uses macOS's folder chooser. Elsewhere, `laweditor here`.
 - A deleted conversation goes to `.laweditor/trash`; the app has no way to bring it back.
+- A project's folder in the home keeps a simple name (letters, digits, "-"), as LawEditor names them; one renamed by hand with a space or a dot isn't listed. Open it with Open a folder… instead.
 - The server's guard (Origin, Host) is tested by hand, not proved.
 - Bend-UI's panes (1.1.20) and the three small additions (1.1.21) are on the lib's branch `harness-panes`, not released: `package.json` still names `#main`.
 

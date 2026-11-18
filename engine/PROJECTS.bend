@@ -12,12 +12,14 @@ import ../harness/ASK.bend as Ask
 # ---------- Shell ----------
 # sh lists and moves folders; every name reaches it as an argument. projects prints each project,
 # its key and its folder split by a tab: the ones in the home, then the ones opened from elsewhere.
+# A folder in the home is a project's key as it is, so only a simple name counts (letters, digits, "-":
+# what PLACES.safe keeps); LawEditor names its folders so.
 
 def tab_sh() -> String:
   "t=$(printf '\\t'); "
 
 def projects_sh() -> String:
-  tab_sh() ++ "projects() { for d in */; do d=${d%/}; [ -d \"$d/.laweditor\" ] && printf '%s\\t%s\\n' \"$d\" \"$d\"; done; [ -f .folders ] && while IFS=\"$t\" read -r k p; do [ -d \"$p/.laweditor\" ] && printf '%s\\t%s\\n' \"$k\" \"$p\"; done < .folders; true; }; "
+  tab_sh() ++ "projects() { for d in */; do d=${d%/}; case \"$d\" in *[!A-Za-z0-9-]*) continue;; esac; [ -d \"$d/.laweditor\" ] && printf '%s\\t%s\\n' \"$d\" \"$d\"; done; [ -f .folders ] && while IFS=\"$t\" read -r k p; do [ -d \"$p/.laweditor\" ] && printf '%s\\t%s\\n' \"$k\" \"$p\"; done < .folders; true; }; "
 
 # ---------- A project's folder ----------
 

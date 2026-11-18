@@ -7,7 +7,7 @@ home=${LAWEDITOR_HOME:-$HOME/LawEditor}
 # (never moved: the originals stay where they were).
 if [ ! -d "$home" ] && [ -d "$root/projects" ]; then
   mkdir -p "$home"
-  for d in "$root"/projects/*/; do [ -d "$d" ] && cp -R "$d" "$home/"; done
+  for d in "$root"/projects/*/; do d=${d%/}; [ -d "$d" ] && cp -R "$d" "$home/"; done   # no "/" at the end: with one, cp copies what is inside
   echo "Your projects were copied from $root/projects to $home. The originals are still there."
 fi
 mkdir -p "$home" && cd "$home" && exec "$root/dist/laweditor-server" "$root"
