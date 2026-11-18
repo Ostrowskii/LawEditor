@@ -19,15 +19,15 @@
 
   <aside class="side" id="side">
     <div class="side__head">
-      <button class="btn btn--plain btn--neutral btn--icon" data-side-toggle aria-label="Side bar"><svg class="icon"><use href="#i-panel-left"/></svg></button>
+      <button class="btn btn--ghost btn--icon" data-side-toggle aria-label="Side bar"><svg class="icon"><use href="#i-panel-left"/></svg></button>
     </div>
-    <button class="btn btn--plain btn--neutral" id="new-conversation" type="button" aria-label="New conversation"><svg class="icon"><use href="#i-plus"/></svg><span class="side__text">New conversation</span></button>
-    <button class="btn btn--plain btn--neutral" data-view="chat" aria-current="page" hidden><svg class="icon"><use href="#i-text"/></svg><span class="side__text">Chat</span></button>
-    <button class="btn btn--plain btn--neutral" data-view="doc" aria-label="Laws"><svg class="icon"><use href="#i-shield"/></svg><span class="side__text">Laws</span></button>
-    <button class="btn btn--plain btn--neutral" data-view="debug" aria-label="Debug"><svg class="icon"><use href="#i-code"/></svg><span class="side__text">Debug</span></button>
+    <button class="btn btn--ghost" id="new-conversation" type="button" aria-label="New conversation"><svg class="icon"><use href="#i-plus"/></svg><span class="side__text">New conversation</span></button>
+    <button class="btn btn--ghost" data-view="chat" aria-current="page" hidden><svg class="icon"><use href="#i-text"/></svg><span class="side__text">Chat</span></button>
+    <button class="btn btn--ghost" data-view="doc" aria-label="Laws"><svg class="icon"><use href="#i-shield"/></svg><span class="side__text">Laws</span></button>
+    <button class="btn btn--ghost" data-view="debug" aria-label="Debug"><svg class="icon"><use href="#i-code"/></svg><span class="side__text">Debug</span></button>
     <nav class="side__body" aria-label="Conversations">
       <div class="side__section" hidden>
-        <button class="btn btn--plain btn--neutral side__toggle" type="button" aria-expanded="true" aria-label="Conversations"><svg class="icon"><use href="#i-list"/></svg><span class="side__text">Conversations</span><svg class="icon icon--sm side__chevron"><use href="#i-chevron-down"/></svg></button>
+        <button class="btn btn--ghost side__toggle" type="button" aria-expanded="true" aria-label="Conversations"><svg class="icon"><use href="#i-list"/></svg><span class="side__text">Conversations</span><svg class="icon icon--sm side__chevron"><use href="#i-chevron-down"/></svg></button>
         <div class="side__items" id="history"></div>
       </div>
     </nav>
@@ -36,14 +36,14 @@
   <div class="window__main">
     <div class="strip" id="strip" role="status" hidden>
       <span class="strip__item" id="strip-place"></span>
-      <button class="btn btn--plain btn--neutral btn--sm" type="button" id="strip-working" hidden></button>
-      <button class="btn btn--plain btn--neutral btn--sm" type="button" id="strip-asking" hidden></button>
-      <button class="btn btn--plain btn--neutral btn--sm strip__end" type="button" id="strip-full"><svg class="icon icon--sm"><use href="#i-panel-left"/></svg><span>Full app</span></button>
+      <button class="btn btn--ghost btn--sm" type="button" id="strip-working" hidden></button>
+      <button class="btn btn--ghost btn--sm" type="button" id="strip-asking" hidden></button>
+      <button class="btn btn--ghost btn--sm strip__end" type="button" id="strip-full"><svg class="icon icon--sm"><use href="#i-panel-left"/></svg><span>Full app</span></button>
     </div>
     <div class="toolbar">
-      <button class="btn btn--plain btn--neutral btn--icon only-narrow" data-side-toggle="side" aria-label="Side bar"><svg class="icon"><use href="#i-panel-left"/></svg></button>
+      <button class="btn btn--ghost btn--icon only-narrow" data-side-toggle="side" aria-label="Side bar"><svg class="icon"><use href="#i-panel-left"/></svg></button>
       <div class="dropdown doc-only" id="kind" hidden>
-        <button class="btn btn--plain btn--neutral" aria-haspopup="menu" aria-expanded="false" title="Line type">
+        <button class="btn btn--ghost" aria-haspopup="menu" aria-expanded="false" title="Line type">
           <svg class="icon"><use href="#i-pilcrow"/></svg><span id="kind-label">Text</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg>
         </button>
         <div class="menu" role="menu" hidden>
@@ -63,13 +63,13 @@
       </div>
       <div class="toolbar__spacer"></div>
       <div class="toolbar__dock"><div id="agent-sm"></div></div>
-      <button class="btn btn--filled doc-only" id="gen" hidden><svg class="icon"><use href="#i-wand-sparkles"/></svg><span class="hide-narrow" id="gen-label">Generate LAWs</span></button>
-      <button class="btn btn--plain btn--neutral btn--icon btn--toggle doc-only" aria-pressed="false" id="files-btn" data-view="files" aria-label="Files" title="Files" hidden><svg class="icon"><use href="#i-code"/></svg></button>
-      <button class="btn btn--plain btn--neutral btn--icon btn--toggle doc-only" aria-pressed="false" id="context-btn" data-view="context" aria-label="Context" title="Context" hidden><svg class="icon"><use href="#i-book-open"/></svg></button>
-      <button class="btn btn--plain btn--neutral btn--icon hide-narrow" type="button" id="compact" aria-label="Compact view"><svg class="icon"><use href="#i-minimize-2"/></svg></button>
-      <button class="btn btn--plain btn--neutral btn--icon" type="button" data-pane-toggle="shell" aria-label="Terminal"><svg class="icon"><use href="#i-terminal"/></svg></button>
-      <button class="btn btn--plain btn--neutral btn--icon" type="button" data-pane-toggle="files" aria-label="Files"><svg class="icon"><use href="#i-panel-right"/></svg></button>
-      <button class="btn btn--plain btn--neutral btn--icon hide-narrow" id="full" aria-label="Full screen" title="Full screen"><svg class="icon"><use href="#i-maximize"/></svg></button>
+      <button class="btn btn--primary doc-only" id="gen" hidden><svg class="icon"><use href="#i-wand-sparkles"/></svg><span class="hide-narrow" id="gen-label">Generate LAWs</span></button>
+      <button class="btn btn--ghost btn--icon btn--toggle doc-only" aria-pressed="false" id="files-btn" data-view="files" aria-label="Files" title="Files" hidden><svg class="icon"><use href="#i-code"/></svg></button>
+      <button class="btn btn--ghost btn--icon btn--toggle doc-only" aria-pressed="false" id="context-btn" data-view="context" aria-label="Context" title="Context" hidden><svg class="icon"><use href="#i-book-open"/></svg></button>
+      <button class="btn btn--ghost btn--icon hide-narrow" type="button" id="compact" aria-label="Compact view"><svg class="icon"><use href="#i-minimize-2"/></svg></button>
+      <button class="btn btn--ghost btn--icon" type="button" data-pane-toggle="shell" aria-label="Terminal"><svg class="icon"><use href="#i-terminal"/></svg></button>
+      <button class="btn btn--ghost btn--icon" type="button" data-pane-toggle="files" aria-label="Files"><svg class="icon"><use href="#i-panel-right"/></svg></button>
+      <button class="btn btn--ghost btn--icon hide-narrow" id="full" aria-label="Full screen" title="Full screen"><svg class="icon"><use href="#i-maximize"/></svg></button>
     </div>
 
     <div class="window__body">
@@ -100,8 +100,8 @@
             <label class="field"><span class="field__label mono">LAWS.bend</span><textarea class="input input--mono" id="laws-src" spellcheck="false"></textarea></label>
             <label class="field"><span class="field__label mono">TYPES.bend</span><textarea class="input input--mono" id="types-src" spellcheck="false"></textarea></label>
             <div class="actions">
-              <button class="btn btn--plain btn--neutral" id="edit-cancel">Cancel</button>
-              <button class="btn btn--filled" id="edit-save">Save</button>
+              <button class="btn btn--ghost" id="edit-cancel">Cancel</button>
+              <button class="btn btn--primary" id="edit-save">Save</button>
             </div>
           </div>
         </div>
@@ -169,22 +169,22 @@
         <div class="menu menu--up menu--wide" id="suggest" role="listbox" aria-label="Suggestions" hidden></div>
         <div class="composer__field">
           <textarea class="composer__text" id="ask" rows="1" placeholder="Message the agent…" aria-label="Message"></textarea>
-          <button class="btn btn--filled btn--sm btn--icon btn--round composer__send" type="submit" aria-label="Send" title="Send" disabled><svg class="icon"><use href="#i-arrow-up"/></svg></button>
+          <button class="btn btn--primary btn--sm btn--icon btn--round composer__send" type="submit" aria-label="Send" title="Send" disabled><svg class="icon"><use href="#i-arrow-up"/></svg></button>
         </div>
       </div>
       <div class="composer__bar">
-        <div class="dropdown" id="place"><button class="btn btn--plain btn--neutral btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Where this conversation works"><svg class="icon icon--sm"><use href="#i-folder"/></svg><span>New project</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
+        <div class="dropdown" id="place"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Where this conversation works"><svg class="icon icon--sm"><use href="#i-folder"/></svg><span>New project</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
         <span class="tag" id="place-name" hidden></span>
-        <div class="dropdown"><button class="btn btn--plain btn--neutral btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><span>Claude</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
-        <div class="dropdown"><button class="btn btn--plain btn--neutral btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><span>Loading…</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
-        <div class="dropdown" id="mode"><button class="btn btn--plain btn--neutral btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" title="What the chat may do"><svg class="icon icon--sm"><use href="#i-shield"/></svg><span></span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
+        <div class="dropdown"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><span>Claude</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
+        <div class="dropdown"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false"><span>Loading…</span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
+        <div class="dropdown" id="mode"><button class="btn btn--ghost btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" title="What the chat may do"><svg class="icon icon--sm"><use href="#i-shield"/></svg><span></span><svg class="icon icon--sm"><use href="#i-chevron-down"/></svg></button><div class="menu menu--up" role="menu" hidden></div></div>
         <div class="meter" id="context" hidden title="How much of the AI's context this conversation uses"><span class="meter__label">Context</span><span class="meter__bar"><span></span></span><span class="meter__value"></span></div>
       </div>
     </form>
     <section class="pane pane--under" id="shell" aria-labelledby="shell-title" hidden>
       <header class="pane__head">
         <h2 class="pane__title" id="shell-title">Terminal</h2>
-        <div class="pane__actions"><button class="btn btn--plain btn--neutral btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close the terminal"><svg class="icon"><use href="#i-x"/></svg></button></div>
+        <div class="pane__actions"><button class="btn btn--ghost btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close the terminal"><svg class="icon"><use href="#i-x"/></svg></button></div>
       </header>
       <div class="term" id="term"></div>
     </section>
@@ -192,7 +192,7 @@
     <aside class="pane" id="files" aria-labelledby="files-title" hidden>
       <header class="pane__head">
         <h2 class="pane__title" id="files-title">Files</h2>
-        <div class="pane__actions"><button class="btn btn--plain btn--neutral btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close files"><svg class="icon"><use href="#i-x"/></svg></button></div>
+        <div class="pane__actions"><button class="btn btn--ghost btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close files"><svg class="icon"><use href="#i-x"/></svg></button></div>
       </header>
       <div class="pane__body" id="files-body"></div>
     </aside>

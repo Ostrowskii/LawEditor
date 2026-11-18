@@ -46,7 +46,7 @@ export function createMode(dd, aiDd, firstAi, allowedAt) {
     r.className = "menu__row"; r.title = G.allowed_title(entry);
     const tone = G.allowed_tone(entry);
     r.innerHTML = `<span class="menu__lead${tone ? " menu__lead--" + tone : ""}"></span><span class="menu__text mono"></span>`
-      + `<button type="button" class="btn btn--plain btn--neutral btn--icon btn--sm" title="Stop allowing this">${icon("x")}</button>`;
+      + `<button type="button" class="btn btn--ghost btn--icon btn--sm" title="Stop allowing this">${icon("x")}</button>`;
     r.querySelector(".menu__lead").textContent = G.allowed_kind(entry);
     r.querySelector(".menu__text").textContent = G.allowed_what(entry);
     const x = r.querySelector("button");

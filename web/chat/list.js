@@ -14,10 +14,10 @@ export function createList(box, { current, onOpen, onMoved, onGone }) {
       const row = document.createElement("div");
       row.className = "side__row";
       const name = title || "New conversation";
-      row.innerHTML = `<button class="btn btn--plain btn--neutral" type="button"${id === current() ? ' aria-current="page"' : ""}>`
+      row.innerHTML = `<button class="btn btn--ghost" type="button"${id === current() ? ' aria-current="page"' : ""}>`
         + (DOT[state] ? `<span class="${DOT[state]}" role="img" aria-label="${SAYS[state]}"></span>` : '<span class="dot" aria-hidden="true"></span>')   // an empty dot: nothing going on; every title starts at the same place
         + `<span class="side__text">${esc(name)}</span>${game ? `<span class="tag">${esc(game)}</span>` : ""}</button>`
-        + `<div class="dropdown side__more"><button class="btn btn--plain btn--neutral btn--icon btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ${esc(name)}">${icon("ellipsis")}</button>`
+        + `<div class="dropdown side__more"><button class="btn btn--ghost btn--icon btn--sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ${esc(name)}">${icon("ellipsis")}</button>`
         + `<div class="menu menu--end" role="menu" hidden>${game ? menuItem("Rename the game", { data: 'data-act="rename"', lead: "pencil" }) : ""}`
         + menuItem("Open its folder", { data: 'data-act="folder"', lead: "folder" }) + '<hr class="separator">'
         + menuItem("Delete conversation", { data: 'data-act="delete"', lead: "trash-2" }) + "</div></div>";
@@ -42,20 +42,30 @@ export function createList(box, { current, onOpen, onMoved, onGone }) {
     f.addEventListener("keydown", (e) => { if (e.key === "Enter") end(true); if (e.key === "Escape") end(false); });
     f.addEventListener("blur", () => end(true));
   }
-  // Deleting asks once more, in the row itself.
-  function confirm(row, key, id) {
+  // Deleting asks once more: the row's menu opens again, on the question. (Plain items: a button in a
+  // menu inside the side bar would take the side bar's width.)
+  function confirm(row) {
+    const dd = row.querySelector(".side__more"), menu = dd.querySelector(".menu"), button = dd.querySelector("[aria-haspopup]");
     editing = true;
-    row.innerHTML = '<span class="side__text detail">Delete it?</span><button class="btn btn--plain btn--neutral btn--sm" type="button">Keep</button><button class="btn btn--tinted btn--danger btn--sm" type="button">Delete</button>';
-    const [, keep, del] = row.children;
-    const end = () => { editing = false; refresh(true); };
-    keep.addEventListener("click", end);
-    del.addEventListener("click", async () => { await post(`/api/c/${encodeURIComponent(key)}/${id}/delete`); if (id === current()) onGone(); end(); });
-    keep.focus();
+    menu.innerHTML = '<p class="menu__empty">Delete this conversation? It goes to the project\'s trash folder.</p>'
+      + menuItem("Delete it", { data: 'data-act="deleted"', lead: "trash-2" }) + menuItem("Keep it", { data: 'data-act="kept"', lead: "x" });
+    setTimeout(() => {
+      button.click();
+      // Closed without an answer: the row is as it was.
+      menu.addEventListener("toggle", (e) => { if (e.newState === "closed") setTimeout(() => { if (editing) { editing = false; refresh(true); } }, 50); });
+    });
+  }
+  async function forget(key, id) {
+    await post(`/api/c/${encodeURIComponent(key)}/${id}/delete`);
+    editing = false;
+    if (id === current()) onGone(); else refresh(true);
   }
   function act(what, row, key, game, id) {
     if (what === "rename") rename(row, key, game);
     if (what === "folder") post(`/api/p/${encodeURIComponent(key)}/open`);
-    if (what === "delete") confirm(row, key, id);
+    if (what === "delete") confirm(row);
+    if (what === "deleted") forget(key, id);
+    if (what === "kept") { editing = false; refresh(true); }
   }
   // force: draw even if the server's list didn't change (the open conversation did).
   async function refresh(force = false) {

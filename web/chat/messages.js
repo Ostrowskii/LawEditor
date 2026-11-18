@@ -156,7 +156,7 @@ export function createMessages(list, page, at) {
       ask: (answers) => new Promise((done) => {
         for (const a of answers) {
           const b = document.createElement("button");
-          b.className = a.main ? "btn btn--sm btn--filled" : "btn btn--sm btn--bordered btn--async"; b.type = "button";
+          b.className = a.main ? "btn btn--sm btn--primary" : "btn btn--sm btn--bordered btn--async"; b.type = "button";
           if (!a.main) b.innerHTML = '<svg class="icon btn__done" aria-hidden="true"><use href="#i-check"/></svg><span class="btn__label"></span><svg class="btn__spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" pathLength="100"/></svg>';
           (b.querySelector(".btn__label") || b).textContent = a.label;
           b.addEventListener("click", () => {
@@ -186,7 +186,7 @@ export function createMessages(list, page, at) {
   function failed(why, again) {
     const m = document.createElement("div");
     m.className = "msg msg--face";
-    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text"></div></div><div class="actions"><button class="btn btn--sm btn--bordered btn--neutral" type="button">Try again</button></div></div>';
+    m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text"></div></div><div class="actions"><button class="btn btn--sm" type="button">Try again</button></div></div>';
     m.querySelector(".block__text").textContent = why;
     if (again) m.querySelector(".actions .btn").addEventListener("click", () => { m.remove(); again(); });
     else m.querySelector(".actions").remove();   // nothing to try again: it only says why
