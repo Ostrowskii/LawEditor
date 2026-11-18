@@ -179,13 +179,15 @@ export function createMessages(list, page, at) {
     };
   }
 
-  // The reply stopped: a card without a dot (Bend-UI drops its column), why, and Try again.
+  // The reply stopped, or something couldn't be done: a card without a dot (Bend-UI drops its column), why,
+  // and Try again when there is something to try.
   function failed(why, again) {
     const m = document.createElement("div");
     m.className = "msg msg--face";
     m.innerHTML = '<div class="msg__face"></div><div><div class="block"><div class="block__text"></div></div><div class="actions"><button class="btn btn--sm btn--bordered btn--neutral" type="button">Try again</button></div></div>';
     m.querySelector(".block__text").textContent = why;
-    m.querySelector(".actions .btn").addEventListener("click", () => { m.remove(); again(); });
+    if (again) m.querySelector(".actions .btn").addEventListener("click", () => { m.remove(); again(); });
+    else m.querySelector(".actions").remove();   // nothing to try again: it only says why
     list.append(m); down();
   }
 

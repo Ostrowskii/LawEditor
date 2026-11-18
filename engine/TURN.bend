@@ -408,7 +408,7 @@ def say.in(bad: Bool, +w: Talk, +text: String) -> IO(String):
     case False{}:
       do IO<String>:
         +log : String <- log_of(w)
-        say.go(Ev.can_say(log), w, text, String.is_empty(Ev.first(log, "me")))
+        say.go(Ev.can_say(log), w, text, Ev.is_new(log))
 
 def number(m: Maybe<&2, U32>) -> U32:
   match m:
@@ -461,6 +461,49 @@ def again(+cx: Sys.Ctx, +key: String, +conv: String, +body: String) -> IO(String
   do IO<String>:
     +dir : String <- Proj.dir(key)
     again.in((String.is_empty(dir) || Bool.not(is_ai(Sys.nth(String.split(body, Ev.tab()), 0n)))), talk_of(cx, key, dir, conv, Sys.nth(String.lines(body), 0n)))
+
+# ---------- The person runs a command themselves (!) ----------
+
+def ran.done(+w: Talk, +command: String, r: U32 & String) -> IO(String):
+  (code, out) = r
+  do IO<String>:
+    emit(w, Ev.event("ran", [command, U32.show(code), String.take(String.trim(out), 20000n)]))
+    state(w, Ev.idle())
+    return "ok\t" ++ key(w)
+
+def ran.go(can: Bool, forbidden: Bool, +w: Talk, +command: String, first: Bool) -> IO(String):
+  match can forbidden:
+    case False{} _:
+      IO.pure(String, "busy")
+    case True{} True{}:
+      IO.pure(String, "readonly")
+    case True{} False{}:
+      do IO<String>:
+        say.title(first, w, "!" ++ command)
+        state(w, Ev.working())
+        r : U32 & String <- Sys.run_in(dir(w), "sh", ["-c", command], 120000)
+        ran.done(w, command, r)
+
+def ran.in(bad: Bool, +w: Talk, +command: String) -> IO(String):
+  match bad:
+    case True{}:
+      IO.pure(String, "unknown")
+    case False{}:
+      do IO<String>:
+        +log : String <- log_of(w)
+        ran.go(Ev.can_say(log), Gate.mode_forbids("Bash", Policy.mode_at(mode(w))), w, command, Ev.is_new(log))
+
+def ran.read(+cx: Sys.Ctx, +key: String, +dir: String, +conv: String, +head: String, +command: String) -> IO(String):
+  ran.in((String.is_empty(dir) || String.is_empty(String.trim(command))), talk_of(cx, key, dir, conv, head), String.trim(command))
+
+# POST /api/c/<key>/<conversation>/run, body: the AI, model and mode on the first line, then a command.
+# It runs in the project's folder, as the person: nothing is asked, since they are the one asking. A mode
+# that only reads runs none (GATE.bend: mode_forbids) and answers "readonly". What it printed is kept in
+# the conversation (the chat reads it too), up to two minutes of work.
+def ran(+cx: Sys.Ctx, +key: String, +conv: String, +body: String) -> IO(String):
+  do IO<String>:
+    +dir : String <- Proj.ensure(key, conv)
+    ran.read(cx, key, dir, conv, Sys.nth(String.lines(body), 0n), String.drop(body, 1n+String.length(Sys.nth(String.lines(body), 0n))))
 
 # ---------- The person stops it ----------
 

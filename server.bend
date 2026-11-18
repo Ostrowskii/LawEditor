@@ -257,20 +257,22 @@ def conversation.in(post: Bool, +dir: String, +conv: String, +rest: List<&2, Str
     case False{}:
       conversation_get(dir, conv, rest)
 
-def conversation.at(say: Bool, again: Bool, +cx: Sys.Ctx, post: Bool, +key: String, +conv: String, +rest: List<&2, String>, +body: String) -> IO(String):
-  match say again:
-    case True{} _:
+def conversation.at(say: Bool, again: Bool, run: Bool, +cx: Sys.Ctx, post: Bool, +key: String, +conv: String, +rest: List<&2, String>, +body: String) -> IO(String):
+  match say again run:
+    case True{} _ _:
       ok(Turn.say(cx, key, conv, body))
-    case False{} True{}:
+    case False{} True{} _:
       ok(Turn.again(cx, key, conv, body))
-    case False{} False{}:
+    case False{} False{} True{}:
+      ok(Turn.ran(cx, key, conv, body))
+    case False{} False{} False{}:
       do IO<String>:
         +dir : String <- Proj.dir(key)
         conversation.in(post, dir, conv, rest, body)
 
-# say makes the conversation's folder itself (Turn.say); everything else needs it to be there.
+# say and run make the conversation's folder themselves (engine/TURN.bend); everything else needs it there.
 def conversation(+cx: Sys.Ctx, +post: Bool, +key: String, +conv: String, +rest: List<&2, String>, +body: String) -> IO(String):
-  conversation.at((post && String.eq(Sys.nth(rest, 0n), "say")), (post && String.eq(Sys.nth(rest, 0n), "again")), cx, post, key, conv, rest, body)
+  conversation.at((post && String.eq(Sys.nth(rest, 0n), "say")), (post && String.eq(Sys.nth(rest, 0n), "again")), (post && String.eq(Sys.nth(rest, 0n), "run")), cx, post, key, conv, rest, body)
 
 # ---------- The interphone: /mcp/<key>/<conversation>/<turn> (GATE.bend) ----------
 

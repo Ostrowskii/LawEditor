@@ -157,13 +157,16 @@ def after(log: String, n: Nat) -> String:
   unlines(after.drop(lines(log), n))
 
 # The conversation as the chat reads it: "Person: …" and "Agent: …", oldest first.
-def talk.line(me: Bool, reply: Bool, +l: String, rest: List<&2, String>) -> List<&2, String>:
-  match me reply:
-    case True{} _:
+# A command the person ran is part of the talk too: the chat reads what it printed.
+def talk.line(me: Bool, reply: Bool, ran: Bool, +l: String, rest: List<&2, String>) -> List<&2, String>:
+  match me reply ran:
+    case True{} _ _:
       ("Person: " ++ field(l, 0n)) <> rest
-    case False{} True{}:
+    case False{} True{} _:
       ("Agent: " ++ field(l, 1n)) <> rest
-    case False{} False{}:
+    case False{} False{} True{}:
+      ("Person: (ran the command `" ++ field(l, 0n) ++ "`; it printed:)\n" ++ String.take(field(l, 2n), 4000n)) <> rest
+    case False{} False{} False{}:
       rest
 
 def talk.go(xs: List<&2, String>) -> List<&2, String>:
@@ -171,7 +174,7 @@ def talk.go(xs: List<&2, String>) -> List<&2, String>:
     case Nil{}:
       Nil{}
     case +h <> t:
-      talk.line(is_a(h, "me"), is_a(h, "reply"), h, talk.go(t))
+      talk.line(is_a(h, "me"), is_a(h, "reply"), is_a(h, "ran"), h, talk.go(t))
 
 def talk(log: String) -> String:
   String.join(talk.go(lines(log)), "\n")
@@ -240,6 +243,10 @@ def named(log: String) -> String:
 # A conversation's title, for the list: the person's first message, its first line, up to 60 characters.
 def title(+log: String) -> String:
   String.take(String.trim(nth(String.lines(field(first(log, "me"), 0n)), 0n)), 60n)
+
+# Has anything been said or done in it yet?
+def is_new(+log: String) -> Bool:
+  (String.is_empty(first(log, "me")) && String.is_empty(first(log, "ran")))
 
 # The game's name when the chat gave none: the conversation's title, up to 40 characters.
 def game_or_title.at(+name: String, +log: String, none: Bool) -> String:

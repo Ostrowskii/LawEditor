@@ -174,6 +174,12 @@ const composer = createComposer($("composer"), {
       if (g) go(g.key);
       place.lock(g ? g.name : "");
     }
+    // A message that starts with ! is a command the person runs themselves, in the project's folder.
+    if (text.startsWith("!")) {
+      const r = await post(conversation("run"), settings() + "\n" + text.slice(1));
+      if (!r.startsWith("ok")) { messages.failed(r === "readonly" ? "Only read runs no command. Pick another mode under the message box to run it." : r === "busy" ? "The chat is still answering, or a question waits above." : "The LawEditor server isn't running, or this project isn't there anymore."); }
+      await read(); sync(); list.refresh(); return;
+    }
     messages.mine(text, files); mineShown++;
     const r = await post(conversation("say"), settings() + "\n" + C.with_files(text, files.join(", ")));
     if (!r.startsWith("ok")) { mineShown--; messages.failed(r === "busy" ? "The chat is still answering, or a question waits above." : "The LawEditor server isn't running, or this project isn't there anymore.", again); sync(); return; }
