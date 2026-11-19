@@ -1,3 +1,19 @@
+# Next: the artifact system (0.1.13)
+
+Written on 2026-11-19. The owner wants her own artifacts, taking Claude's apart: a page (HTML, no server), the agent's tools, skills, types, capabilities, and the shell around the page, where the comment picker lives. Her complaints split in two: what Claude does but differently each time (fits the screen, shows every parameter, options beside Today, values that come back), and what it lacks (a debug mode with the spacings, picking a part to read it). The artifact "Ferramentas do Artefato" has the whole map.
+
+Built in 0.1.13: the frame, and the tools that read any page (Comment, Measures, Inspect).
+
+Still to decide or build, in the order I would take them (mine, not chosen):
+
+- **Parameters from the code.** The page declares its parameters in a `.bend` file; the frame draws a panel from that list, so none can be left out, and the preview never leaves the screen. Needs a way for the frame to hand the values to the page (the probe can carry them).
+- **Options.** The same declaration names Today and the options; the bar switches between them.
+- **Values.** What was picked goes to the chat as an event of the conversation, not copied by hand.
+- **The skill** (`ARTIFACT.md`): when the chat makes such a page, and how it fills the declaration.
+- **Laws of the frame**, to propose: every declared parameter has a control; every option gives every parameter a value; an artifact uses the project's own code or says it doesn't. They need the owner's yes.
+- **States** and **a lock per value**: tools for later.
+- The name: "artifact" is Claude's word. Her own pages are often called Lab.
+
 # Next: after the Bend pipeline (0.1.12)
 
 Written on 2026-11-18, with 0.1.12. LawEditor is a harness for Bend: what it builds is Bend, built by Bend's own pipeline. What is still to decide or build.

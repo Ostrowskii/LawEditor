@@ -8,6 +8,8 @@ import { get, post, menuItem, esc, icon } from "../where.js";
 export function createPlace(dd, tag) {
   const button = dd.querySelector("[aria-haspopup]"), label = button.querySelector("span"), menu = dd.querySelector(".menu");
   let projects = [], chosen = null;   // chosen: { key, name }, or null for a new project
+  // The project picked before the first message, told to the parts that show a project (the page's pane).
+  const told = () => document.dispatchEvent(new CustomEvent("laweditor:place", { detail: chosen ? chosen.key : "" }));
   function draw() {
     label.textContent = chosen ? chosen.name : "New project";
     menu.innerHTML = menuItem("New project", { data: 'data-key=""', checked: !chosen, lead: "plus" })
@@ -23,18 +25,18 @@ export function createPlace(dd, tag) {
     if ("open" in d) {
       const [k, name] = (await post("/api/open-folder")).split("\t");
       if (k) { await load(); chosen = { key: k, name: name || k }; }
-      draw(); return;
+      draw(); told(); return;
     }
     chosen = d.key ? { key: d.key, name: (projects.find(([p]) => p === d.key) || [])[1] || d.key } : null;
-    draw();
+    draw(); told();
   });
   button.addEventListener("click", () => { if (menu.hidden) load(); });   // opening: the projects as they are now
   load();
   return {
     chosen: () => chosen,
-    choose(k, name) { chosen = { key: k, name }; draw(); },
+    choose(k, name) { chosen = { key: k, name }; draw(); told(); },
     // A new conversation: the button again, on "New project".
-    open() { chosen = null; dd.hidden = false; tag.hidden = true; load(); },
+    open() { chosen = null; dd.hidden = false; tag.hidden = true; load(); told(); },
     // The conversation has begun: its project's name shows (nothing while it has none), and nothing is picked.
     lock(name) { dd.hidden = true; tag.hidden = !name; tag.innerHTML = name ? icon("folder", true) + esc(name) : ""; },
   };

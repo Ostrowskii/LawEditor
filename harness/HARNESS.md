@@ -47,6 +47,22 @@ Until they answer, the turn waits, with no time limit. Nothing is tried twice.
 The question shows in the message box's place, with what would change; the conversation keeps one
 line of what was answered. A refused action is marked "not run" and changes no count of files.
 
+## Reading the page
+
+The project's page opens beside the chat, in a frame that is always the same (INSPECT.bend). Its bar has
+three tools, and none needs the chat to write anything: they read the page as it is drawn, so they are the
+same on every page.
+
+| Tool     | What it does                                                                        |
+|----------|-------------------------------------------------------------------------------------|
+| Comment  | Click a part and write what should change: the message starts with what it points at |
+| Measures | Every padding, margin and gap, drawn with its number                                 |
+| Inspect  | Click a part and read its values, each with its name on the scale                    |
+
+The page is served from another address than the app's, so the app can't read it. Only when the app's
+frame asks (?inspect), the server adds the probe to the page (engine/probe.js): it reads the page's boxes
+and tells the frame. Opened in a tab of its own, the page is exactly what Bend bundled.
+
 ## What is yours
 
 A message that starts with ! is a command you run yourself, in the project's folder. Nothing is
@@ -65,6 +81,8 @@ chat_only_reads, chat_claude_reads, chat_codex_reads, chat_never_changes
 
 ## Ideas from
 
+- Claude's artifacts: a page beside the talk, with a tool on its bar to comment on a part of it.
+- Chrome DevTools and Figma's Dev Mode: the space of each part drawn over it, with its number.
 - Claude Code: a mode picker under the field; asking before an action; rules per tool.
 - Codex: a read-only mode as the safe start.
 - Hermes: allow once, for the session, or never.

@@ -36,8 +36,9 @@ const messages = createMessages($("chat"), page, {
   changed: (files) => document.dispatchEvent(new CustomEvent("laweditor:changes", { detail: files })),
   // A file that isn't Bend says so beside its name (POLICY.bend: the layers); "" for a .bend file.
   tag: (file) => P.tag_of(A.extension(file)),
-  // The project's page, as Bend last bundled it, in a tab of its own (null: there is nowhere to open it).
-  openPage: () => (pages ? () => window.open(`${pages}/${encodeURIComponent(key())}/`, "_blank", "noopener") : null),
+  // The project's page, as Bend last bundled it, in the frame beside the chat (web/preview.js; null: there is
+  // nowhere to open it).
+  openPage: () => (pages ? () => document.dispatchEvent(new CustomEvent("laweditor:preview")) : null),
 });
 const face = createFace();
 const [aiDd, modelDd] = document.querySelectorAll("#composer .composer__bar .dropdown:not(#place):not(#mode)");
@@ -158,7 +159,7 @@ async function draw(line, old, later) {
   if (kind === "project") { go(f(0)); place.lock(f(1)); list.refresh(); }
   // What Bend said of the project after the reply changed it (engine/BUILD.bend).
   if (kind === "check") uiTurn().checked(f(1), f(2));
-  if (kind === "page") uiTurn().bundled(f(1), f(2));
+  if (kind === "page") { uiTurn().bundled(f(1), f(2)); if (!old) document.dispatchEvent(new CustomEvent("laweditor:page")); }   // the frame shows the new one
   if (kind === "ran") { ui = null; messages.ran(f(0), f(1), f(2)); }
 }
 
@@ -221,11 +222,15 @@ const composer = createComposer($("composer"), {
       await read(); sync(); list.refresh(); return;
     }
     ui = null; messages.mine(text, files); mineShown++;
+    document.dispatchEvent(new CustomEvent("laweditor:sent"));   // a comment's pin stays where it points
     const r = await post(conversation("say"), settings() + "\n" + text + C.with_files("", files.join(", ")));   // CHAT.bend writes what comes after the text
     if (!r.startsWith("ok")) { mineShown--; messages.failed(r === "busy" ? "The chat is still answering, or a question waits for your answer." : "The LawEditor server isn't running, or this project isn't there anymore.", again); sync(); return; }
     list.refresh();
   },
 });
+
+// The person pointed at a part of the page (web/preview.js): the message starts with what it points at.
+document.addEventListener("laweditor:point", (e) => { if (!inChat) toChat(); composer.write(e.detail); });
 
 // Commands typed with / (CHAT.bend's commands).
 function command(name) {

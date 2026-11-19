@@ -21,6 +21,7 @@ import ./engine/TERMINAL.bend as Term
 import ./harness/MODELS.bend as Models
 import ./harness/GATE.bend as Gate
 import ./harness/EVENTS.bend as Ev
+import ./harness/INSPECT.bend as Insp
 
 # ---------- A request ----------
 
@@ -450,6 +451,9 @@ def answer.at(image: Bool, s: Socket, +req: String, +cx: Sys.Ctx) -> IO(Unit):
 # app is named by another origin and refused (is_ours), so no page can use the app's own powers (run a
 # command, answer a question). The door only reads: GET /<key>/<file>, from the project's
 # .laweditor/page. A request belongs to this door when it is addressed to it by name (Host).
+# The app shows a page in a frame of its own with tools over it (harness/INSPECT.bend): a page asked for
+# with ?inspect comes with the probe, a script of LawEditor's that reads the page's boxes and tells the
+# frame. Asked for without it (a tab of its own), the page is exactly what Bend bundled.
 
 def is_pages(+host: String, +cx: Sys.Ctx) -> Bool:
   (Bool.not(U32.is_eq(Sys.pages(cx), 0)) && (String.eq(host, Sys.pages_address(cx)) || String.eq(host, "localhost:" ++ U32.show(Sys.pages(cx)))))
@@ -463,34 +467,68 @@ def page.send_text(s: Socket, res: String) -> IO(Unit):
 def page.file(+rest: String) -> String:
   Sys.pick((String.is_empty(rest) || String.ends_with(rest, "/")), rest ++ "index.html", rest)
 
-# bare: the address names the project and nothing after it, not even "/": the page's own files are asked
-# for beside it, so it is sent to the same address with the "/".
-def page.send(bad: Bool, bare: Bool, s: Socket, +key: String, +file: String) -> IO(Unit):
-  match bad bare:
-    case True{} _:
+# The page with the probe (harness/INSPECT.bend), for the app's own frame; a page that isn't there is not found.
+def page.send_probed(missing: Bool, s: Socket, html: String) -> IO(Unit):
+  match missing:
+    case True{}:
       page.send_text(s, not_found())
-    case False{} True{}:
-      page.send_text(s, "HTTP/1.1 301 Moved Permanently\r\nLocation: /" ++ key ++ "/\r\nConnection: close\r\n\r\n")
-    case False{} False{}:
+    case False{}:
+      page.send_text(s, http("200 OK", "text/html; charset=utf-8", Insp.with_probe(html)))
+
+# A file of the page, as it is; or, when the app asked for the probe and the file is a page, with it.
+def page.send_file(probed: Bool, s: Socket, +file: String) -> IO(Unit):
+  match probed:
+    case True{}:
+      do IO<Unit>:
+        +html : String <- Sys.read_file(file)
+        page.send_probed(String.is_empty(html), s, html)
+    case False{}:
       do IO<Unit>:
         r : Result<&1, &1, U32 & String, File> <- File.open(file, "r")
         send_bytes.open(s, r, content_type(file))
 
-# path: without what comes after "?". p: its pieces.
-def page.at(s: Socket, get: Bool, +path: String, +p: List<&2, String>) -> IO(Unit):
+# bare: the address names the project and nothing after it, not even "/": the page's own files are asked
+# for beside it, so it is sent to the same address with the "/" (and with what was asked after "?").
+# ask: the app asked for the probe.
+def page.send(bad: Bool, bare: Bool, ask: Bool, s: Socket, +key: String, +file: String) -> IO(Unit):
+  match bad bare:
+    case True{} _:
+      page.send_text(s, not_found())
+    case False{} True{}:
+      page.send_text(s, "HTTP/1.1 301 Moved Permanently\r\nLocation: /" ++ key ++ "/" ++ Sys.pick(ask, "?" ++ Insp.query(), "") ++ "\r\nConnection: close\r\n\r\n")
+    case False{} False{}:
+      page.send_file(Insp.probed(ask, file), s, file)
+
+# path: without what comes after "?". p: its pieces. q: what comes after "?".
+def page.at(s: Socket, get: Bool, +path: String, +p: List<&2, String>, q: String) -> IO(Unit):
   do IO<Unit>:
     +dir : String <- Proj.dir(Sys.nth(p, 0n))
     page.send((Bool.not(get) || String.contains(path, "..") || String.is_empty(Sys.nth(p, 0n)) || String.is_empty(dir)),
-      (String.is_empty(Sys.nth(p, 1n)) && Bool.not(String.ends_with(path, "/"))),
+      (String.is_empty(Sys.nth(p, 1n)) && Bool.not(String.ends_with(path, "/"))), Insp.asks(q),
       s, Places.safe(Sys.nth(p, 0n)), Places.page(dir) ++ "/" ++ page.file(String.join(Ev.after.drop(p, 1n), "/")))
 
-def page.answer(s: Socket, +req: String) -> IO(Unit):
-  page.at(s, String.eq(req_word(req, 0n), "GET"), Sys.nth(String.split(req_word(req, 1n), '?'), 0n), Ev.after.drop(String.split(Sys.nth(String.split(req_word(req, 1n), '?'), 0n), '/'), 1n))
+# The probe itself: LawEditor's own script, the same for every project (harness/INSPECT.bend says what it is).
+def page.probe(s: Socket, +cx: Sys.Ctx) -> IO(Unit):
+  do IO<Unit>:
+    js : String <- Sys.read_file(Sys.root(cx) ++ Insp.probe_file())
+    page.send_text(s, http("200 OK", "text/javascript; charset=utf-8", js))
+
+def page.pick(probe: Bool, s: Socket, get: Bool, +path: String, +p: List<&2, String>, q: String, +cx: Sys.Ctx) -> IO(Unit):
+  match probe:
+    case True{}:
+      page.probe(s, cx)
+    case False{}:
+      page.at(s, get, path, p, q)
+
+def page.answer(s: Socket, +req: String, +cx: Sys.Ctx) -> IO(Unit):
+  +parts = String.split(req_word(req, 1n), '?')
+  +p = Ev.after.drop(String.split(Sys.nth(parts, 0n), '/'), 1n)
+  page.pick((String.eq(req_word(req, 0n), "GET") && String.eq(Sys.nth(p, 0n), Insp.probe_name())), s, String.eq(req_word(req, 0n), "GET"), Sys.nth(parts, 0n), p, Sys.nth(parts, 1n), cx)
 
 def answer.door(pages: Bool, s: Socket, +req: String, +cx: Sys.Ctx) -> IO(Unit):
   match pages:
     case True{}:
-      page.answer(s, req)
+      page.answer(s, req, cx)
     case False{}:
       answer.at(is_image(req_word(req, 1n)), s, req, cx)
 

@@ -13,6 +13,7 @@
 <script type="module" src="./files.js"></script>
 <script type="module" src="./shell.js"></script>
 <script type="module" src="./compact.js"></script>
+<script type="module" src="./preview.js"></script>
 </head>
 <body class="desk">
 <div class="window" id="win" data-agent="lg">
@@ -69,6 +70,7 @@
       <button class="btn btn--ghost btn--icon hide-narrow" type="button" id="compact" aria-label="Compact view"><svg class="icon"><use href="#i-minimize-2"/></svg></button>
       <button class="btn btn--ghost btn--icon" type="button" data-pane-toggle="shell" aria-label="Terminal"><svg class="icon"><use href="#i-terminal"/></svg></button>
       <button class="btn btn--ghost btn--icon" type="button" data-pane-toggle="files" aria-label="Files"><svg class="icon"><use href="#i-panel-right"/></svg></button>
+      <button class="btn btn--ghost btn--icon" type="button" data-pane-toggle="preview" aria-label="Page" title="Page"><svg class="icon"><use href="#i-eye"/></svg></button>
       <button class="btn btn--ghost btn--icon hide-narrow" id="full" aria-label="Full screen" title="Full screen"><svg class="icon"><use href="#i-maximize"/></svg></button>
     </div>
 
@@ -193,6 +195,15 @@
         <div class="pane__actions"><button class="btn btn--ghost btn--icon btn--sm" type="button" data-pane-toggle aria-label="Close files"><svg class="icon"><use href="#i-x"/></svg></button></div>
       </header>
       <div class="pane__body" id="files-body"></div>
+    </aside>
+    <!-- The project's page, in a frame that is always the same, with its tools on the bar (harness/INSPECT.bend). -->
+    <aside class="pane" id="preview" aria-labelledby="preview-title" hidden>
+      <header class="pane__head">
+        <h2 class="pane__title" id="preview-title">Page</h2>
+        <div class="pane__actions" id="preview-tools" role="toolbar" aria-label="Page tools"></div>
+      </header>
+      <div class="inspect-host inspect-host--fill"><iframe class="inspect-frame" id="preview-frame" title="The project's page" hidden></iframe><div class="inspect" id="preview-layer"></div></div>
+      <div class="inspect-out" id="preview-out" role="status" hidden></div>
     </aside>
     </div>
 

@@ -124,5 +124,13 @@ export function createComposer(form, { onSend, onStop, onCommand, files: listFil
     const b = dock.querySelector('[aria-busy="true"]');
     if (b && id !== undefined) { doneBtn(b, b.textContent.trim()); setTimeout(close, 600); } else close();
   }
-  return { focus: () => text.focus(), set, ask, answered };
+  // What a message starts with, put there for the person to go on writing (a comment on a part of the page).
+  // A start put before, and not yet written after, gives its place to the new one.
+  let start = "";
+  function write(prefix) {
+    if (text.disabled) return;
+    text.value = prefix + (start && text.value.startsWith(start) ? text.value.slice(start.length) : text.value);
+    start = prefix; sync(); text.focus(); text.setSelectionRange(text.value.length, text.value.length);
+  }
+  return { focus: () => text.focus(), set, ask, answered, write };
 }

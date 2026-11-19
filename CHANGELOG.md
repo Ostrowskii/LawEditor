@@ -14,6 +14,20 @@ What the person asked for, as goals. Each one becomes an iteration when it's pic
 - When a project is done, the chat shows a link that opens its folder on the computer.
 - A main chat that opens other chats (NEXT.md: options B and C).
 
+## 0.1.13 (2026-11-19, not validated by the owner yet)
+
+On Bend-UI 1.1.29 (the inspect extension). The first piece of the artifact system: the frame, and the three tools that need nothing from the chat. From the "Ferramentas do Artefato" artifact (https://claude.ai/artifact/WxbKa5dA3bCtNTKhCYsz4j), with the tools on the bar (its option A).
+
+- **The page opens beside the chat**, in a pane (the eye in the toolbar; "Open the page" in a reply). Before, it opened in a tab of its own; that is still there, as a button on the pane's bar. A page Bend bundles again shows again by itself.
+- **Three tools on the pane's bar** (`harness/INSPECT.bend` says which, and what each does). None needs the chat to write anything: they read the page as it is drawn, so they are the same on every page.
+  - **Measures**: every padding, margin and gap of the page, drawn over it with its number.
+  - **Inspect**: click a part and read its values under the page, each space and corner with its name on the scale (`space_4`, `radius_md`) or "off the scale". The click does nothing else to the page.
+  - **Comment**: click a part and a pin marks it; the message box starts with what it points at (`On the page, at button.btn ("Later"): `), and you write the rest. Sent, the pin stays, numbered. `CHAT.md` tells the chat what such a message means.
+- **How the app reads a page it can't touch.** A project's page is served from another address (the pages door), so the app can't read it. A page asked for with `?inspect` comes with the probe (`engine/probe.js`): it reads the page's boxes and tells the frame, and the app draws them with Bend-UI's inspect. Only the app's frame asks for it: in a tab of its own the page is exactly what Bend bundled. What the probe sends is kept to numbers and short texts.
+- **Tested**, in a browser driven by script, on a server of its own with a small Bend project: the pane opens on the project's page; with no tool on the page works as usual; Measures shows the page's own numbers (padding 16 and 24, gap 12 and 8, margin 20) exactly over it, and follows a scroll; Inspect reads a button without pressing it and names what is on the scale; Comment starts the message, moves with a second click keeping what was written, and keeps its pin when sent; a page bundled again shows again; light, dark, 1280 and 520 wide. `bun run check` passes.
+- **Not tested**: with a real AI (a comment sent to Claude, and its answer); a page the chat itself built; the four older suites; a page with thousands of parts (the probe measures the first 1,500 in sight); Safari, Firefox, a screen reader.
+- **Not yet**: Parameters, Options and Values (the tools that need the page to declare a list), the skill that tells the chat how to make such a page, and the laws of the frame. A pin is lost when the page is shown again. The tools have no keyboard way to pick a part.
+
 ## 0.1.12 (2026-11-18)
 
 Run and approved by the owner on 2026-11-18. LawEditor began as an editor of laws for game design and is now a harness for Bend. This version takes what was left of the first idea out of what runs, and makes what the chat builds go through Bend's own pipeline.
