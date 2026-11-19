@@ -111,7 +111,7 @@ def with_model(has: Bool, flag: String, model: String, rest: List<String>) -> Li
       rest
 
 def codex_args(+model: String, prompt: String) -> List<String>:
-  "exec" <> with_model(Bool.not(String.is_empty(model)), "-m", model, ["--sandbox", Policy.codex_sandbox(Policy.chat()), prompt])
+  "exec" <> with_model(Bool.not(String.is_empty(model)), "-m", model, ["--skip-git-repo-check", "--sandbox", Policy.codex_sandbox(Policy.chat()), prompt])
 
 def claude_args(+model: String, prompt: String) -> List<String>:
   "-p" <> prompt <> Policy.claude_isolation() <> with_model(Bool.not(String.is_empty(model)), "--model", model,
@@ -140,7 +140,7 @@ def patience() -> String:
 def run_ai.at(codex: Bool, asks: Bool, +w: Talk, +turn: String, prompt: String) -> IO(U32 & String):
   match codex asks:
     case True{} _:
-      Sys.run_in(dir(w), "codex", codex_args(model(w), prompt), 600000)
+      Sys.run_in_quiet(dir(w), "codex", codex_args(model(w), prompt), 600000)
     case False{} True{}:
       Sys.run_to(dir(w), Places.turn(dir(w), turn), "env", patience() <> "claude" <> asking_args(w, turn, prompt), 4294967295)
     case False{} False{}:
